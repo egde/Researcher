@@ -42,13 +42,17 @@ jobs:
 
       - name: Ensure DATABASE_URL in Vercel env
         run: |
+          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env.local
           ENV_FILE=".vercel/.env.production.local"
-          if ! grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null; then
-            echo 'DATABASE_URL="${{ secrets.DATABASE_URL }}"' >> "$ENV_FILE"
+          touch "$ENV_FILE"
+          if ! grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> "$ENV_FILE"
           fi
 
       - name: Build
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
