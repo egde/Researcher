@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset --force",
     "postinstall": "prisma generate"
   },
   "dependencies": {

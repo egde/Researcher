@@ -27,6 +27,11 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Seed production database
+        run: npx tsx prisma/seed.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
   deploy:
     name: Deploy to Vercel
     runs-on: ubuntu-latest
