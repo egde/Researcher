@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { renderMarkdown } from "@/lib/markdown";
 import { DocumentViewer } from "@/components/documents/DocumentViewer";

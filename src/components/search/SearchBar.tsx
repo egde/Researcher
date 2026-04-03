@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 
 interface SearchResult {
@@ -25,23 +25,34 @@ export function SearchBar() {
   const [results, setResults] = useState<SearchResult | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (query.length < 2) {
-      setResults(null);
-      setOpen(false);
-      return;
-    }
+  const search = useCallback(async (q: string) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-    const timer = setTimeout(async () => {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+        signal: controller.signal,
+      });
       const data = await res.json();
       setResults(data);
       setOpen(true);
-    }, 200);
+    } catch {
+      // aborted or network error
+    }
+  }, []);
 
+  useEffect(() => {
+    if (query.length < 2) return;
+
+    const timer = setTimeout(() => search(query), 200);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, search]);
+
+  // Derive: hide results when query is cleared
+  const showResults = open && query.length >= 2 && results !== null;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -53,16 +64,27 @@ export function SearchBar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  function handleSelect() {
+    setOpen(false);
+    setQuery("");
+  }
+
   return (
     <div ref={ref} className="relative">
       <input
         type="text"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (e.target.value.length < 2) {
+            setResults(null);
+            setOpen(false);
+          }
+        }}
         placeholder="SEARCH..."
         className="w-full border border-border bg-transparent px-3 py-1.5 text-xs tracking-wider placeholder:text-muted focus:outline-none focus:border-foreground"
       />
-      {open && results && (
+      {showResults && results && (
         <div className="absolute top-full left-0 right-0 mt-px border border-foreground bg-background z-50 max-h-80 overflow-y-auto">
           {results.companies.length > 0 && (
             <div className="border-b border-border">
@@ -73,7 +95,7 @@ export function SearchBar() {
                 <Link
                   key={c.id}
                   href={`/companies/${c.slug}`}
-                  onClick={() => { setOpen(false); setQuery(""); }}
+                  onClick={handleSelect}
                   className="block px-3 py-2 text-xs no-underline text-foreground hover:bg-surface"
                 >
                   {c.name}
@@ -91,7 +113,7 @@ export function SearchBar() {
                 <Link
                   key={d.id}
                   href={`/documents/${d.slug}`}
-                  onClick={() => { setOpen(false); setQuery(""); }}
+                  onClick={handleSelect}
                   className="block px-3 py-2 text-xs no-underline text-foreground hover:bg-surface"
                 >
                   {d.title}

@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { SourceBadge } from "@/components/companies/SourceBadge";
-import { Badge } from "@/components/ui/Badge";
 
 function formatDate(date: Date, short = false) {
   return date.toLocaleDateString("en-US", {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,26 +9,40 @@ interface HistoryEntry {
   title: string;
 }
 
+let entries: HistoryEntry[] = [];
+const listeners = new Set<() => void>();
+
+function pushEntry(path: string) {
+  const last = entries[entries.length - 1];
+  if (last?.path === path) return;
+
+  const title = path === "/"
+    ? "home"
+    : path.split("/").filter(Boolean).pop() || path;
+
+  entries = [...entries, { path, title }].slice(-12);
+  listeners.forEach((l) => l());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+function getSnapshot() {
+  return entries;
+}
+
+function getServerSnapshot() {
+  return [] as HistoryEntry[];
+}
+
 export function HistoryRail() {
   const pathname = usePathname();
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const history = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
-    setHistory((prev) => {
-      // Don't add duplicates of the current page
-      if (prev.length > 0 && prev[prev.length - 1].path === pathname) {
-        return prev;
-      }
-
-      // Derive a short title from the pathname
-      const title = pathname === "/"
-        ? "home"
-        : pathname.split("/").filter(Boolean).pop() || pathname;
-
-      const next = [...prev, { path: pathname, title }];
-      // Keep last 12 entries
-      return next.slice(-12);
-    });
+    pushEntry(pathname);
   }, [pathname]);
 
   if (history.length <= 1) return null;

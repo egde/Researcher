@@ -8,8 +8,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [] });
   }
 
-  const searchTerm = `%${q}%`;
-
   // Search documents
   const documents = await prisma.document.findMany({
     where: {
