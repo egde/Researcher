@@ -40,6 +40,13 @@ jobs:
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Ensure DATABASE_URL in Vercel env
+        run: |
+          ENV_FILE=".vercel/.env.production.local"
+          if ! grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null; then
+            echo 'DATABASE_URL="${{ secrets.DATABASE_URL }}"' >> "$ENV_FILE"
+          fi
+
       - name: Build
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 

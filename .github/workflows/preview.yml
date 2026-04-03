@@ -82,10 +82,17 @@ jobs:
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Inject Neon branch DATABASE_URL into Vercel env
+        run: |
+          # Override DATABASE_URL in the Vercel env file so it's available at both build and runtime
+          ENV_FILE=".vercel/.env.preview.local"
+          # Remove existing DATABASE_URL line if present
+          sed -i '/^DATABASE_URL=/d' "$ENV_FILE" 2>/dev/null || true
+          # Append the Neon branch URL
+          echo 'DATABASE_URL="${{ steps.neon.outputs.db_url_with_pooler }}"' >> "$ENV_FILE"
+
       - name: Build preview
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          DATABASE_URL: ${{ steps.neon.outputs.db_url_with_pooler }}
 
       - name: Deploy preview
         id: vercel
