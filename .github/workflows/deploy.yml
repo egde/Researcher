@@ -22,8 +22,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Deploy migrations to Neon
-        run: npx prisma migrate deploy
+      - name: Deploy migrations to Neon (direct connection)
+        run: |
+          # Migrations need a direct connection (no pooler) for advisory locks
+          DIRECT_URL=$(echo "$DATABASE_URL" | sed 's/-pooler\./\./')
+          DATABASE_URL="$DIRECT_URL" npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 

@@ -66,8 +66,10 @@ jobs:
           branch_name: preview/${{ github.ref_name }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
-      - name: Run migrations on preview branch
-        run: npx prisma migrate deploy
+      - name: Run migrations on preview branch (direct connection)
+        run: |
+          DIRECT_URL=$(echo "$DATABASE_URL" | sed 's/-pooler\./\./')
+          DATABASE_URL="$DIRECT_URL" npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ steps.neon.outputs.db_url_with_pooler }}
 
