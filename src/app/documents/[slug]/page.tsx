@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { renderMarkdown } from "@/lib/markdown";
@@ -87,7 +88,15 @@ export default async function DocumentPage({
                 {document.type.replace(/_/g, " ").toLowerCase()}
               </Badge>
             </div>
-            <h1 className="text-lg font-bold mb-1">{document.title}</h1>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-lg font-bold">{document.title}</h1>
+              <Link
+                href={`/documents/${slug}/edit`}
+                className="text-[10px] uppercase tracking-wider text-muted no-underline hover:text-foreground"
+              >
+                Edit
+              </Link>
+            </div>
             <div className="flex items-center gap-3 text-[11px] text-muted">
               <span>{document.author.name}</span>
               <span>{formatDate(document.createdAt)}</span>
