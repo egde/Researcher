@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { SourceBadge } from "@/components/companies/SourceBadge";
 
 function formatDate(date: Date) {
@@ -41,25 +42,24 @@ export default async function DashboardPage() {
       orderBy: { updatedAt: "desc" },
       take: 10,
     }),
-    prisma.company.findMany({
-      include: {
-        _count: { select: { documents: true, votes: true } },
-        votes: {
-          select: { conviction: true },
-        },
-      },
-      orderBy: { name: "asc" },
-    }),
+    prisma.$queryRaw<
+      { id: string; name: string; slug: string; avgConviction: number; voteCount: number }[]
+    >(Prisma.sql`
+      SELECT
+        c.id,
+        c.name,
+        c.slug,
+        AVG(v.conviction)::float AS "avgConviction",
+        COUNT(v.id)::int AS "voteCount"
+      FROM "Company" c
+      JOIN "Vote" v ON v."companyId" = c.id
+      GROUP BY c.id, c.name, c.slug
+      ORDER BY AVG(v.conviction) DESC
+      LIMIT 10
+    `),
   ]);
 
-  const topCompanies = companies
-    .filter((c) => c.votes.length > 0)
-    .map((c) => ({
-      ...c,
-      avgConviction: c.votes.reduce((s, v) => s + v.conviction, 0) / c.votes.length,
-    }))
-    .sort((a, b) => b.avgConviction - a.avgConviction)
-    .slice(0, 10);
+  const topCompanies = companies;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -124,7 +124,7 @@ export default async function DashboardPage() {
                       <ConvictionDots level={Math.round(c.avgConviction)} />
                       <span className="text-muted ml-1">{c.avgConviction.toFixed(1)}</span>
                     </td>
-                    <td className="text-right text-muted">{c.votes.length}</td>
+                    <td className="text-right text-muted">{c.voteCount}</td>
                   </tr>
                 ))}
               </tbody>

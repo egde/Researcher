@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Editor } from "@/components/editor/Editor";
 import { Input } from "@/components/ui/Input";
@@ -39,24 +39,68 @@ export function DocumentForm({ mode, slug, initialData }: DocumentFormProps) {
   const [type, setType] = useState(initialData?.type ?? "COMPANY_RESEARCH");
   const [content, setContent] = useState(initialData?.content ?? "");
   const [tagInput, setTagInput] = useState(initialData?.tags.join(", ") ?? "");
-  const [selectedCompanies, setSelectedCompanies] = useState<string[]>(
-    initialData?.companyIds ?? [],
-  );
-  const [companies, setCompanies] = useState<Company[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Company picker state
+  const [selected, setSelected] = useState<Company[]>([]);
+  const [companyQuery, setCompanyQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Company[]>([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Resolve initial company IDs to names on mount (edit mode)
   useEffect(() => {
-    fetch("/api/companies")
-      .then((r) => r.json())
-      .then((data) => setCompanies(data))
-      .catch(() => {});
+    if (initialData?.companyIds.length) {
+      fetch(`/api/companies/search?ids=${initialData.companyIds.join(",")}`)
+        .then((r) => r.json())
+        .then((data: Company[]) => setSelected(data))
+        .catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Search companies via debounced input
+  function handleCompanySearch(value: string) {
+    setCompanyQuery(value);
+    if (value.length < 1) {
+      setSearchResults([]);
+      setDropdownOpen(false);
+      return;
+    }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      fetch(`/api/companies/search?q=${encodeURIComponent(value)}`)
+        .then((r) => r.json())
+        .then((data: Company[]) => {
+          const selectedIds = new Set(selected.map((c) => c.id));
+          setSearchResults(data.filter((c) => !selectedIds.has(c.id)));
+          setDropdownOpen(true);
+        })
+        .catch(() => {});
+    }, 250);
+  }
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  function toggleCompany(id: string) {
-    setSelectedCompanies((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
-    );
+  function addCompany(company: Company) {
+    setSelected((prev) => [...prev, company]);
+    setCompanyQuery("");
+    setSearchResults([]);
+    setDropdownOpen(false);
+  }
+
+  function removeCompany(id: string) {
+    setSelected((prev) => prev.filter((c) => c.id !== id));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -74,7 +118,8 @@ export function DocumentForm({ mode, slug, initialData }: DocumentFormProps) {
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
 
-    const body = { title, type, content, source: "web", companyIds: selectedCompanies, tags };
+    const companyIds = selected.map((c) => c.id);
+    const body = { title, type, content, source: "web", companyIds, tags };
 
     const url = mode === "create" ? "/api/documents" : `/api/documents/${slug}`;
     const method = mode === "create" ? "POST" : "PUT";
@@ -131,26 +176,62 @@ export function DocumentForm({ mode, slug, initialData }: DocumentFormProps) {
         </select>
       </div>
 
-      {/* Companies */}
-      <div>
+      {/* Companies — typeahead picker */}
+      <div ref={pickerRef}>
         <label className="block text-[10px] uppercase tracking-wider text-muted mb-1">
           Companies
         </label>
-        <div className="flex flex-wrap gap-1">
-          {companies.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => toggleCompany(c.id)}
-              className={`text-[10px] uppercase tracking-wider px-2 py-0.5 border cursor-pointer ${
-                selectedCompanies.includes(c.id)
-                  ? "bg-foreground text-background border-foreground"
-                  : "border-border text-muted hover:border-foreground hover:text-foreground"
-              }`}
-            >
-              {c.name}
-            </button>
-          ))}
+
+        {/* Selected pills */}
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {selected.map((c) => (
+              <span
+                key={c.id}
+                className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 bg-foreground text-background"
+              >
+                {c.name}
+                <button
+                  type="button"
+                  onClick={() => removeCompany(c.id)}
+                  className="hover:opacity-70 cursor-pointer"
+                >
+                  x
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Search input */}
+        <div className="relative">
+          <Input
+            value={companyQuery}
+            onChange={(e) => handleCompanySearch(e.target.value)}
+            placeholder="Search companies..."
+          />
+
+          {/* Dropdown */}
+          {dropdownOpen && searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 z-50 border border-foreground bg-background max-h-60 overflow-y-auto">
+              {searchResults.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => addCompany(c)}
+                  className="block w-full text-left px-3 py-2 text-xs font-mono hover:bg-foreground hover:text-background cursor-pointer"
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {dropdownOpen && companyQuery.length >= 1 && searchResults.length === 0 && (
+            <div className="absolute top-full left-0 right-0 z-50 border border-border bg-background px-3 py-2 text-[11px] text-muted">
+              No companies found
+            </div>
+          )}
         </div>
       </div>
 

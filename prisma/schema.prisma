@@ -62,6 +62,9 @@ model Company {
   sector    Sector            @relation(fields: [sectorId], references: [id])
   documents DocumentCompany[]
   votes     Vote[]
+
+  @@index([name])
+  @@index([sectorId])
 }
 
 model Document {

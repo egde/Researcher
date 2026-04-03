@@ -31,7 +31,7 @@ export function RelatedSidebar({ companies, related, backlinks }: RelatedSidebar
             Companies
           </h3>
           <ul className="space-y-1">
-            {companies.map((dc) => (
+            {companies.slice(0, 10).map((dc) => (
               <li key={dc.company.slug}>
                 <Link
                   href={`/companies/${dc.company.slug}`}
@@ -41,6 +41,11 @@ export function RelatedSidebar({ companies, related, backlinks }: RelatedSidebar
                 </Link>
               </li>
             ))}
+            {companies.length > 10 && (
+              <li className="text-[10px] text-muted">
+                +{companies.length - 10} more
+              </li>
+            )}
           </ul>
         </div>
       )}
