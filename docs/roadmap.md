@@ -27,7 +27,7 @@
 - [x] `/documents/new` and `/documents/[slug]/edit` pages
 - [x] On save: parse `[[wiki-links]]` in content, populate DocumentLink table
 
-## Phase 3 — Conviction Voting + Company Pages (PARTIALLY COMPLETE)
+## Phase 3 — Conviction Voting + Company Pages (COMPLETE)
 
 - [x] Companies page: paginated directory with search, region/sector filters, A-Z strip
 - [x] Company CRUD API: `GET/POST /api/companies`, `PUT/DELETE /api/companies/[slug]`
@@ -39,12 +39,12 @@
 - [x] DocumentForm: typeahead company picker (replaces 20K toggle buttons)
 - [x] Mobile-responsive layout: hamburger nav, stacking filters, scrollable tables
 - [x] Database indexes on Company (name, sectorId)
-- [ ] ConvictionVoter component (1-5 clickable scale + rationale)
-- [ ] `POST /api/votes` (upsert per user+company)
-- [ ] `GET /api/votes?companyId=X`
-- [ ] VoteSummary component (avg conviction, per-analyst breakdown)
-- [ ] ConvictionHeatmap (companies x analysts grayscale grid)
-- [ ] `/votes` heatmap page
+- [x] ConvictionVoter component (1-5 clickable ●○ scale + rationale textarea)
+- [x] `POST /api/votes` (upsert per user+company, zod-validated)
+- [x] `GET /api/votes?companyId=X` (returns votes, avg, count)
+- [x] VoteSummary component (avg conviction, distribution bar, per-analyst breakdown)
+- [x] ConvictionHeatmap (companies x analysts grayscale grid, sorted by avg)
+- [x] `/votes` heatmap page with sticky company column
 
 ## Phase 4 — Ingest APIs + Obsidian Plugin
 

@@ -307,12 +307,60 @@ Bulk upserts by `sourceRef`. Idempotent — safe to re-run.
 
 ---
 
+## Votes
+
+### `GET /api/votes`
+
+Get conviction votes for a company.
+
+**Query parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `companyId` | string | **Required.** Company to get votes for |
+
+**Response:**
+```json
+{
+  "votes": [
+    {
+      "id": "cuid",
+      "conviction": 4,
+      "rationale": "Strong moat, improving margins",
+      "createdAt": "2026-04-03T12:00:00.000Z",
+      "updatedAt": "2026-04-04T08:00:00.000Z",
+      "user": { "id": "cuid", "name": "Alice Chen" }
+    }
+  ],
+  "avg": 3.8,
+  "count": 5
+}
+```
+
+### `POST /api/votes`
+
+Upsert a conviction vote. One vote per user per company (enforced by unique constraint). Requires authentication.
+
+**Request body:**
+```json
+{
+  "companyId": "company-cuid",
+  "conviction": 4,
+  "rationale": "Strong moat, improving margins"
+}
+```
+
+- `conviction`: integer 1-5 (required)
+- `rationale`: string (optional)
+
+**Response:** The created/updated vote object with user info.
+
+---
+
 ## Planned Endpoints (not yet implemented)
 
 | Endpoint | Phase | Purpose |
 |----------|-------|---------|
-| `POST /api/votes` | 3 | Upsert conviction vote |
-| `GET /api/votes?companyId=X` | 3 | Get votes for a company |
 | `GET/POST /api/comments` | 6 | Threaded comments |
 | `POST /api/reactions` | 6 | Toggle emoji reaction |
 | `GET /api/graph` | 6 | Graph visualization data |

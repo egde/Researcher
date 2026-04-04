@@ -3,24 +3,16 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { SourceBadge } from "@/components/companies/SourceBadge";
+import { VoteSummary } from "@/components/votes/VoteSummary";
+import { ConvictionVoterWrapper } from "@/components/votes/ConvictionVoterWrapper";
 
-function formatDate(date: Date, short = false) {
+function formatDate(date: Date) {
   return date.toLocaleDateString("en-US", {
-    year: short ? undefined : "numeric",
     month: "short",
     day: "numeric",
   });
-}
-
-function ConvictionDots({ level }: { level: number }) {
-  return (
-    <span className="text-sm tracking-wide">
-      {Array.from({ length: 5 }, (_, i) => (
-        <span key={i}>{i < level ? "●" : "○"}</span>
-      ))}
-    </span>
-  );
 }
 
 export default async function CompanyPage({
@@ -30,38 +22,40 @@ export default async function CompanyPage({
 }) {
   const { slug } = await params;
 
-  const company = await prisma.company.findUnique({
-    where: { slug },
-    include: {
-      sector: {
-        include: { region: { select: { name: true, slug: true } } },
-      },
-      documents: {
-        include: {
-          document: {
-            include: {
-              author: { select: { id: true, name: true } },
-              tags: { include: { tag: true } },
+  const [company, session] = await Promise.all([
+    prisma.company.findUnique({
+      where: { slug },
+      include: {
+        sector: {
+          include: { region: { select: { name: true, slug: true } } },
+        },
+        documents: {
+          include: {
+            document: {
+              include: {
+                author: { select: { id: true, name: true } },
+                tags: { include: { tag: true } },
+              },
             },
           },
+          orderBy: { document: { createdAt: "desc" } },
         },
-        orderBy: { document: { createdAt: "desc" } },
-      },
-      votes: {
-        include: {
-          user: { select: { id: true, name: true } },
+        votes: {
+          include: {
+            user: { select: { id: true, name: true } },
+          },
+          orderBy: { updatedAt: "desc" },
         },
-        orderBy: { updatedAt: "desc" },
       },
-    },
-  });
+    }),
+    auth(),
+  ]);
 
   if (!company) notFound();
 
-  const avgConviction =
-    company.votes.length > 0
-      ? company.votes.reduce((sum, v) => sum + v.conviction, 0) / company.votes.length
-      : 0;
+  const currentUserVote = session?.user?.id
+    ? company.votes.find((v) => v.user.id === session.user.id)
+    : undefined;
 
   // Separate external vs internal documents
   const externalDocs = company.documents.filter(
@@ -95,51 +89,22 @@ export default async function CompanyPage({
         </p>
       </div>
 
-      {/* Conviction overview */}
-      {company.votes.length > 0 && (
-        <div className="border-b border-border pb-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[10px] uppercase tracking-wider text-muted">
-              Conviction
-            </h2>
-            <div className="flex items-center gap-2">
-              <ConvictionDots level={Math.round(avgConviction)} />
-              <span className="text-xs text-muted">
-                {avgConviction.toFixed(1)} avg ({company.votes.length} votes)
-              </span>
-            </div>
-          </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr>
-                <th className="text-left">Analyst</th>
-                <th className="text-left">Conviction</th>
-                <th className="text-left">Rationale</th>
-                <th className="text-right">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {company.votes.map((vote) => (
-                <tr key={vote.id}>
-                  <td>{vote.user.name}</td>
-                  <td>
-                    <ConvictionDots level={vote.conviction} />
-                  </td>
-                  <td className="text-muted max-w-xs truncate">
-                    {vote.rationale || "—"}
-                  </td>
-                  <td className="text-right text-muted">
-                    {formatDate(vote.updatedAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* Vote summary */}
+      <VoteSummary votes={company.votes} />
+
+      {/* Conviction voter */}
+      <ConvictionVoterWrapper
+        companyId={company.id}
+        companyName={company.name}
+        existingVote={
+          currentUserVote
+            ? { conviction: currentUserVote.conviction, rationale: currentUserVote.rationale }
+            : undefined
+        }
+      />
 
       {/* Timeline — Internal Research */}
-      <div className="mb-6">
+      <div className="mb-6 mt-6">
         <h2 className="text-[10px] uppercase tracking-wider text-muted mb-3">
           Research ({internalDocs.length})
         </h2>
@@ -214,4 +179,3 @@ function TimelineItem({
     </div>
   );
 }
-

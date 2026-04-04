@@ -99,15 +99,18 @@ src/
 │   ├── api/                      # API route handlers
 │   │   ├── documents/            # CRUD + ingest endpoints
 │   │   ├── companies/            # Paginated list, CRUD, typeahead search
+│   │   ├── votes/                # Conviction vote upsert + query
 │   │   ├── regions/              # Region list + create
 │   │   ├── sectors/              # Sector list, create, rename
 │   │   └── search/               # Full-text search
 │   ├── documents/                # Document list + reader + editor pages
-│   └── companies/                # Company directory + detail pages
+│   ├── companies/                # Company directory + detail pages
+│   └── votes/                    # Conviction heatmap page
 ├── components/
 │   ├── layout/                   # Navbar (responsive, hamburger on mobile)
 │   ├── documents/                # DocumentCard, DocumentViewer, RelatedSidebar
 │   ├── companies/                # SourceBadge, CompanyDirectory
+│   ├── votes/                    # ConvictionVoter, VoteSummary, ConvictionHeatmap
 │   ├── editor/                   # Editor (Tiptap), DocumentForm (typeahead picker)
 │   ├── search/                   # SearchBar with instant results
 │   └── ui/                       # Badge, Button, Card, Input

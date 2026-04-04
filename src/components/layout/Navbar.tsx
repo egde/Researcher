@@ -10,6 +10,7 @@ const links = [
   { href: "/", label: "HOME" },
   { href: "/documents", label: "DOCUMENTS" },
   { href: "/companies", label: "COMPANIES" },
+  { href: "/votes", label: "VOTES" },
 ];
 
 export function Navbar() {
