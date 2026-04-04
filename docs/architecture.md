@@ -98,18 +98,24 @@ src/
 │   ├── globals.css               # Tailwind + design system tokens
 │   ├── api/                      # API route handlers
 │   │   ├── documents/            # CRUD + ingest endpoints
-│   │   ├── companies/            # Company listing
+│   │   ├── companies/            # Paginated list, CRUD, typeahead search
+│   │   ├── regions/              # Region list + create
+│   │   ├── sectors/              # Sector list, create, rename
 │   │   └── search/               # Full-text search
-│   ├── documents/                # Document list + reader pages
-│   └── companies/                # Company list + detail pages
+│   ├── documents/                # Document list + reader + editor pages
+│   └── companies/                # Company directory + detail pages
 ├── components/
-│   ├── layout/                   # Navbar, HistoryRail
+│   ├── layout/                   # Navbar (responsive, hamburger on mobile)
 │   ├── documents/                # DocumentCard, DocumentViewer, RelatedSidebar
-│   ├── companies/                # SourceBadge
+│   ├── companies/                # SourceBadge, CompanyDirectory
+│   ├── editor/                   # Editor (Tiptap), DocumentForm (typeahead picker)
 │   ├── search/                   # SearchBar with instant results
 │   └── ui/                       # Badge, Button, Card, Input
+├── hooks/
+│   └── useDebounce.ts            # Generic debounce hook
 ├── lib/
 │   ├── prisma.ts                 # Singleton Prisma client with PG adapter
+│   ├── auth.ts                   # NextAuth v5 config
 │   ├── markdown.ts               # remark/rehype render pipeline
 │   ├── slugify.ts                # URL slug generation
 │   ├── links.ts                  # [[wiki-link]] parser

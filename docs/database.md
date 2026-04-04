@@ -66,6 +66,10 @@ Three-level hierarchy. Each entity has a unique `name` and `slug`.
 
 **Indexes:** `type`, `source`
 
+### Company
+
+**Indexes:** `name`, `sectorId`
+
 ### DocumentCompany (M:N join)
 
 Composite PK: `(documentId, companyId)`. Cascades on document delete.

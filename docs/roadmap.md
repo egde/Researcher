@@ -17,19 +17,29 @@
 - [x] UI primitives: Badge (3 variants), Button (3 variants), Card, Input
 - [x] SourceBadge component (external/internal/research distinction)
 
-## Phase 2 — Auth + Rich Editor
+## Phase 2 — Auth + Rich Editor (COMPLETE)
 
-- [ ] NextAuth v5 credentials provider
-- [ ] Login page + route protection middleware
-- [ ] API key generation for users (Obsidian plugin auth)
-- [ ] Tiptap WYSIWYG rich editor component
-- [ ] Frontmatter form (title, type, company multi-select, tags)
-- [ ] `/documents/new` and `/documents/[slug]/edit` pages
-- [ ] On save: parse `[[wiki-links]]` in content, populate DocumentLink table
+- [x] NextAuth v5 credentials provider
+- [x] Login page + route protection middleware
+- [x] API key generation for users (Obsidian plugin auth)
+- [x] Tiptap WYSIWYG rich editor component
+- [x] Frontmatter form (title, type, company multi-select, tags)
+- [x] `/documents/new` and `/documents/[slug]/edit` pages
+- [x] On save: parse `[[wiki-links]]` in content, populate DocumentLink table
 
-## Phase 3 — Conviction Voting + Company Pages
+## Phase 3 — Conviction Voting + Company Pages (PARTIALLY COMPLETE)
 
-- [ ] ConvictionVoter component (1-5 clickable ●○ scale + rationale)
+- [x] Companies page: paginated directory with search, region/sector filters, A-Z strip
+- [x] Company CRUD API: `GET/POST /api/companies`, `PUT/DELETE /api/companies/[slug]`
+- [x] Company search API: `GET /api/companies/search` (typeahead)
+- [x] Regions API: `GET/POST /api/regions`
+- [x] Sectors API: `GET/POST /api/sectors`, `PUT /api/sectors/[slug]`
+- [x] Dashboard: optimized top convictions via SQL aggregation
+- [x] RelatedSidebar: capped at 10 companies with overflow
+- [x] DocumentForm: typeahead company picker (replaces 20K toggle buttons)
+- [x] Mobile-responsive layout: hamburger nav, stacking filters, scrollable tables
+- [x] Database indexes on Company (name, sectorId)
+- [ ] ConvictionVoter component (1-5 clickable scale + rationale)
 - [ ] `POST /api/votes` (upsert per user+company)
 - [ ] `GET /api/votes?companyId=X`
 - [ ] VoteSummary component (avg conviction, per-analyst breakdown)
@@ -45,8 +55,9 @@
 - [ ] Obsidian plugin: "Pull from Wiki" command
 - [ ] PDF upload endpoint (`POST /api/upload`) as manual fallback
 
-## Phase 5 — Hierarchy Browsing + Search
+## Phase 5 — Hierarchy Browsing + Search (PARTIALLY COMPLETE)
 
+- [x] `GET /api/sectors` and `GET /api/regions` endpoints
 - [ ] `/sectors/[slug]` and `/regions/[slug]` pages
 - [ ] PostgreSQL tsvector full-text search replacing current ILIKE
 - [ ] Tag filtering on documents page
@@ -58,7 +69,7 @@
 - [ ] Emoji reactions (`POST /api/reactions`, toggle per user+doc+emoji)
 - [ ] Dashboard: ActivityFeed, TopMovers, MyActivity (personalized)
 - [ ] `/graph` page: d3-force network visualization of documents and companies
-- [ ] Responsive layout, error boundaries
+- [ ] Error boundaries
 - [ ] Admin user management (create accounts, manage API keys)
 
 ## Future

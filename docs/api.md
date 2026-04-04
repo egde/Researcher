@@ -92,6 +92,178 @@ Delete a document and all associated relations (cascading).
 
 ---
 
+## Companies
+
+### `GET /api/companies`
+
+Paginated company listing with search, filter, and sort.
+
+**Query parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `q` | string | Case-insensitive name search (contains) |
+| `sectorId` | string | Filter by sector |
+| `regionId` | string | Filter by region (via sector) |
+| `letter` | string | Filter by first letter of name |
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Results per page (default: 50, max: 100) |
+
+**Response:**
+```json
+{
+  "companies": [
+    {
+      "id": "cuid",
+      "name": "Apple Inc",
+      "slug": "apple",
+      "sector": { "name": "Technology", "region": { "name": "North America", "slug": "north-america" } },
+      "_count": { "documents": 5, "votes": 3 }
+    }
+  ],
+  "total": 250,
+  "page": 1,
+  "limit": 50,
+  "totalPages": 5
+}
+```
+
+### `POST /api/companies`
+
+Create a new company. Requires authentication.
+
+**Request body:**
+```json
+{
+  "name": "Acme Corp",
+  "sectorId": "sector-cuid"
+}
+```
+
+**Response:** `201` with the created company object including sector and region.
+
+### `PUT /api/companies/[slug]`
+
+Update a company's name or sector. Requires authentication.
+
+**Request body:**
+```json
+{
+  "name": "New Name",
+  "sectorId": "new-sector-cuid"
+}
+```
+
+### `DELETE /api/companies/[slug]`
+
+Delete a company. Fails with `409` if the company has associated documents or votes. Requires authentication.
+
+### `GET /api/companies/search`
+
+Lightweight typeahead search returning only `id`, `name`, `slug`. Used by the DocumentForm company picker.
+
+**Query parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `q` | string | Search by name (min 1 char) |
+| `ids` | string | Comma-separated IDs to resolve (for edit mode) |
+
+**Response:** Array of `{ id, name, slug }` objects (max 20 results for search).
+
+---
+
+## Regions
+
+### `GET /api/regions`
+
+List all regions with sector counts.
+
+**Response:**
+```json
+[
+  { "id": "cuid", "name": "North America", "slug": "north-america", "_count": { "sectors": 4 } }
+]
+```
+
+### `POST /api/regions`
+
+Create a new region. Requires authentication.
+
+**Request body:**
+```json
+{ "name": "Latin America" }
+```
+
+---
+
+## Sectors
+
+### `GET /api/sectors`
+
+List sectors with region info and company counts.
+
+**Query parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `regionId` | string | Filter by region |
+
+**Response:**
+```json
+[
+  {
+    "id": "cuid",
+    "name": "Technology",
+    "slug": "technology",
+    "region": { "id": "cuid", "name": "North America", "slug": "north-america" },
+    "_count": { "companies": 8 }
+  }
+]
+```
+
+### `POST /api/sectors`
+
+Create a new sector. Requires authentication.
+
+**Request body:**
+```json
+{ "name": "Industrials", "regionId": "region-cuid" }
+```
+
+### `PUT /api/sectors/[slug]`
+
+Rename a sector. Requires authentication.
+
+**Request body:**
+```json
+{ "name": "New Sector Name" }
+```
+
+---
+
+## Search
+
+### `GET /api/search?q=...`
+
+Full-text search across documents and companies. Requires minimum 2 characters.
+
+**Response:**
+```json
+{
+  "documents": [
+    { "id": "...", "slug": "...", "title": "...", "type": "...", "source": "...", "author": { "name": "..." } }
+  ],
+  "companies": [
+    { "id": "...", "slug": "...", "name": "...", "sector": { "name": "..." } }
+  ]
+}
+```
+
+Currently uses `ILIKE` pattern matching. Phase 5 will add PostgreSQL `tsvector` full-text search.
+
+---
+
 ## Ingest (Phase 4 — not yet implemented)
 
 ### `POST /api/documents/ingest`
@@ -135,52 +307,12 @@ Bulk upserts by `sourceRef`. Idempotent — safe to re-run.
 
 ---
 
-## Search
-
-### `GET /api/search?q=...`
-
-Full-text search across documents and companies. Requires minimum 2 characters.
-
-**Response:**
-```json
-{
-  "documents": [
-    { "id": "...", "slug": "...", "title": "...", "type": "...", "source": "...", "author": { "name": "..." } }
-  ],
-  "companies": [
-    { "id": "...", "slug": "...", "name": "...", "sector": { "name": "..." } }
-  ]
-}
-```
-
-Currently uses `ILIKE` pattern matching. Phase 5 will add PostgreSQL `tsvector` full-text search.
-
----
-
-## Companies
-
-### `GET /api/companies`
-
-List all companies with sector and region info.
-
-**Query parameters:**
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `sectorId` | string | Filter by sector |
-
-**Response:** Array of company objects with `sector.region`, `_count.documents`, `_count.votes`.
-
----
-
 ## Planned Endpoints (not yet implemented)
 
 | Endpoint | Phase | Purpose |
 |----------|-------|---------|
 | `POST /api/votes` | 3 | Upsert conviction vote |
 | `GET /api/votes?companyId=X` | 3 | Get votes for a company |
-| `GET /api/sectors` | 5 | List sectors |
-| `GET /api/regions` | 5 | List regions |
 | `GET/POST /api/comments` | 6 | Threaded comments |
 | `POST /api/reactions` | 6 | Toggle emoji reaction |
 | `GET /api/graph` | 6 | Graph visualization data |
