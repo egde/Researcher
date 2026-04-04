@@ -264,28 +264,36 @@ Currently uses `ILIKE` pattern matching. Phase 5 will add PostgreSQL `tsvector` 
 
 ---
 
-## Ingest (Phase 4 — not yet implemented)
+## Ingest
+
+All ingest endpoints require `Authorization: Bearer <apiKey>` header.
 
 ### `POST /api/documents/ingest`
 
-Obsidian plugin endpoint. Auth via `Authorization: Bearer <apiKey>`.
+Obsidian plugin endpoint. Upserts by title + author — publishing the same note again updates the existing document.
 
 **Request body:**
 ```json
 {
   "title": "Apple Q4 Deep Dive",
-  "type": "company_research",
+  "type": "COMPANY_RESEARCH",
   "companies": ["Apple Inc", "Microsoft"],
   "tags": ["tech", "earnings"],
   "content": "# Markdown content..."
 }
 ```
 
-Upserts by title + author. Returns `{ slug, url }`.
+- `companies`: array of company names, resolved case-insensitively against the database
+- `tags`: array of tag names, auto-created if they don't exist
+
+**Response:**
+```json
+{ "slug": "apple-q4-deep-dive", "url": "/documents/apple-q4-deep-dive" }
+```
 
 ### `POST /api/documents/ingest/batch`
 
-Databricks batch ingest endpoint. Auth via service API key.
+Databricks batch ingest endpoint. **Requires ADMIN role.** Up to 100 documents per request. Each document is upserted by `sourceRef` — safe to re-run.
 
 **Request body:**
 ```json
@@ -303,7 +311,36 @@ Databricks batch ingest endpoint. Auth via service API key.
 }
 ```
 
-Bulk upserts by `sourceRef`. Idempotent — safe to re-run.
+**Response:**
+```json
+{
+  "summary": { "total": 3, "created": 2, "updated": 1, "errors": 0 },
+  "results": [
+    { "sourceRef": "...", "slug": "...", "status": "created" },
+    { "sourceRef": "...", "slug": "...", "status": "updated" }
+  ]
+}
+```
+
+---
+
+## Upload
+
+### `POST /api/upload`
+
+PDF upload with text extraction. Supports both session auth and API key auth. Multipart form data.
+
+**Form fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | File | PDF file (required, max 20MB) |
+| `title` | string | Document title (defaults to filename) |
+| `type` | string | Document type (defaults to `BROKER_RESEARCH`) |
+| `companies` | string | Comma-separated company names |
+| `tags` | string | Comma-separated tag names |
+
+**Response:** `201` with `{ slug, title, url }`
 
 ---
 

@@ -119,6 +119,8 @@ src/
 ├── lib/
 │   ├── prisma.ts                 # Singleton Prisma client with PG adapter
 │   ├── auth.ts                   # NextAuth v5 config
+│   ├── apiAuth.ts                # Bearer API key authentication
+│   ├── pdfParse.ts               # PDF text extraction wrapper
 │   ├── markdown.ts               # remark/rehype render pipeline
 │   ├── slugify.ts                # URL slug generation
 │   ├── links.ts                  # [[wiki-link]] parser

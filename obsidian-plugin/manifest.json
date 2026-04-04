@@ -1,0 +1,9 @@
+{
+  "id": "research-wiki",
+  "name": "Research Wiki",
+  "version": "0.1.0",
+  "minAppVersion": "1.0.0",
+  "description": "Publish and pull research notes to/from the Research Wiki",
+  "author": "Research Team",
+  "isDesktopOnly": false
+}

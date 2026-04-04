@@ -46,14 +46,15 @@
 - [x] ConvictionHeatmap (companies x analysts grayscale grid, sorted by avg)
 - [x] `/votes` heatmap page with sticky company column
 
-## Phase 4 — Ingest APIs + Obsidian Plugin
+## Phase 4 — Ingest APIs + Obsidian Plugin (COMPLETE)
 
-- [ ] `POST /api/documents/ingest` — API key auth, upsert by title+author
-- [ ] `POST /api/documents/ingest/batch` — service key auth, bulk upsert by sourceRef
-- [ ] Obsidian plugin: settings (API URL, API key)
-- [ ] Obsidian plugin: "Publish to Wiki" command
-- [ ] Obsidian plugin: "Pull from Wiki" command
-- [ ] PDF upload endpoint (`POST /api/upload`) as manual fallback
+- [x] `POST /api/documents/ingest` — API key auth, upsert by title+author, company name resolution
+- [x] `POST /api/documents/ingest/batch` — admin-only API key auth, bulk upsert by sourceRef, per-doc status reporting
+- [x] Obsidian plugin: settings (API URL, API key)
+- [x] Obsidian plugin: "Publish to Wiki" command (reads YAML frontmatter for metadata)
+- [x] Obsidian plugin: "Pull from Wiki" command (search by title, overwrite local file)
+- [x] PDF upload endpoint (`POST /api/upload`) with pdf-parse text extraction (multipart form, 20MB limit)
+- [x] Shared `authenticateApiKey` helper for Bearer token auth
 
 ## Phase 5 — Hierarchy Browsing + Search (PARTIALLY COMPLETE)
 
