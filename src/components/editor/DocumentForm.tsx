@@ -105,8 +105,12 @@ export function DocumentForm({ mode, slug, initialData }: DocumentFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) {
-      setError("Title and content are required");
+    if (!title.trim()) {
+      setError("Title is required");
+      return;
+    }
+    if (!content.trim()) {
+      setError("Content is required");
       return;
     }
 

@@ -28,10 +28,7 @@ export function Editor({ content, onChange }: EditorProps) {
     content,
     immediatelyRender: false,
     onUpdate: ({ editor }) => {
-      const md = (
-        editor.storage.markdown.manager as { serialize: (doc: unknown) => string }
-      ).serialize(editor.state.doc);
-      onChange(md);
+      onChange(editor.getMarkdown());
     },
   });
 
