@@ -156,32 +156,34 @@ export function CompanyDirectory({ regions }: { regions: Region[] }) {
       />
 
       {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <select
-          value={regionId}
-          onChange={(e) => handleRegionChange(e.target.value)}
-          className="border border-border px-2 py-1 text-[11px] font-mono bg-background"
-        >
-          <option value="">All regions</option>
-          {regions.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2">
+          <select
+            value={regionId}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className="border border-border px-2 py-1.5 text-[11px] font-mono bg-background flex-1 sm:flex-none"
+          >
+            <option value="">All regions</option>
+            {regions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={sectorId}
-          onChange={(e) => handleSectorChange(e.target.value)}
-          className="border border-border px-2 py-1 text-[11px] font-mono bg-background"
-        >
-          <option value="">All sectors</option>
-          {sectors.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+          <select
+            value={sectorId}
+            onChange={(e) => handleSectorChange(e.target.value)}
+            className="border border-border px-2 py-1.5 text-[11px] font-mono bg-background flex-1 sm:flex-none"
+          >
+            <option value="">All sectors</option>
+            {sectors.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Alphabet strip */}
         <div className="flex items-center gap-0.5 flex-wrap">
@@ -228,8 +230,8 @@ export function CompanyDirectory({ regions }: { regions: Region[] }) {
       {session && (
         <div>
           {showAddForm ? (
-            <form onSubmit={handleAddCompany} className="flex items-end gap-2">
-              <div>
+            <form onSubmit={handleAddCompany} className="flex flex-col sm:flex-row sm:items-end gap-2">
+              <div className="flex-1">
                 <label className="block text-[9px] uppercase tracking-wider text-muted mb-0.5">
                   Name
                 </label>
@@ -240,7 +242,7 @@ export function CompanyDirectory({ regions }: { regions: Region[] }) {
                   required
                 />
               </div>
-              <div>
+              <div className="flex-1">
                 <label className="block text-[9px] uppercase tracking-wider text-muted mb-0.5">
                   Sector
                 </label>
@@ -248,7 +250,7 @@ export function CompanyDirectory({ regions }: { regions: Region[] }) {
                   value={newSectorId}
                   onChange={(e) => setNewSectorId(e.target.value)}
                   required
-                  className="border border-border px-2 py-1.5 text-sm font-mono bg-background"
+                  className="w-full border border-border px-2 py-1.5 text-sm font-mono bg-background"
                 >
                   <option value="">Select...</option>
                   {regions.flatMap((r) =>
@@ -260,16 +262,18 @@ export function CompanyDirectory({ regions }: { regions: Region[] }) {
                   )}
                 </select>
               </div>
-              <Button type="submit" variant="primary" disabled={adding}>
-                {adding ? "Adding..." : "Add"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setShowAddForm(false)}
-              >
-                Cancel
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button type="submit" variant="primary" disabled={adding}>
+                  {adding ? "Adding..." : "Add"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowAddForm(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
             </form>
           ) : (
             <button
@@ -290,39 +294,41 @@ export function CompanyDirectory({ regions }: { regions: Region[] }) {
         <p className="text-sm text-muted py-8">No companies found.</p>
       ) : (
         <>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted">
-                <th className="text-left py-2 font-normal">Name</th>
-                <th className="text-left py-2 font-normal">Sector</th>
-                <th className="text-left py-2 font-normal">Region</th>
-                <th className="text-right py-2 font-normal">Docs</th>
-                <th className="text-right py-2 font-normal">Votes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.companies.map((c) => (
-                <tr key={c.id} className="border-b border-border">
-                  <td className="py-2">
-                    <Link
-                      href={`/companies/${c.slug}`}
-                      className="text-foreground no-underline hover:underline"
-                    >
-                      {c.name}
-                    </Link>
-                  </td>
-                  <td className="py-2 text-muted">{c.sector.name}</td>
-                  <td className="py-2 text-muted">{c.sector.region.name}</td>
-                  <td className="py-2 text-right text-muted">
-                    {c._count.documents}
-                  </td>
-                  <td className="py-2 text-right text-muted">
-                    {c._count.votes}
-                  </td>
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <table className="w-full text-sm min-w-[420px]">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted">
+                  <th className="text-left py-2 font-normal">Name</th>
+                  <th className="text-left py-2 font-normal">Sector</th>
+                  <th className="text-left py-2 font-normal hidden sm:table-cell">Region</th>
+                  <th className="text-right py-2 font-normal">Docs</th>
+                  <th className="text-right py-2 font-normal">Votes</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.companies.map((c) => (
+                  <tr key={c.id} className="border-b border-border">
+                    <td className="py-2">
+                      <Link
+                        href={`/companies/${c.slug}`}
+                        className="text-foreground no-underline hover:underline"
+                      >
+                        {c.name}
+                      </Link>
+                    </td>
+                    <td className="py-2 text-muted">{c.sector.name}</td>
+                    <td className="py-2 text-muted hidden sm:table-cell">{c.sector.region.name}</td>
+                    <td className="py-2 text-right text-muted">
+                      {c._count.documents}
+                    </td>
+                    <td className="py-2 text-right text-muted">
+                      {c._count.votes}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {/* Pagination */}
           <div className="flex items-center justify-between pt-2">

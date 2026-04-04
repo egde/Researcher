@@ -137,7 +137,7 @@ export default async function DashboardPage() {
               Recent Votes
             </h2>
             {recentVotes.map((vote) => (
-              <div key={vote.id} className="py-2 border-b border-border flex items-center justify-between">
+              <div key={vote.id} className="py-2 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
                 <div>
                   <Link
                     href={`/companies/${vote.company.slug}`}
