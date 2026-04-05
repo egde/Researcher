@@ -18,6 +18,10 @@ interface SearchResult {
     name: string;
     sector: { name: string };
   }[];
+  tags: {
+    id: string;
+    name: string;
+  }[];
 }
 
 export function SearchBar() {
@@ -51,7 +55,6 @@ export function SearchBar() {
     return () => clearTimeout(timer);
   }, [query, search]);
 
-  // Derive: hide results when query is cleared
   const showResults = open && query.length >= 2 && results !== null;
 
   useEffect(() => {
@@ -68,6 +71,12 @@ export function SearchBar() {
     setOpen(false);
     setQuery("");
   }
+
+  const hasResults =
+    results &&
+    (results.documents.length > 0 ||
+      results.companies.length > 0 ||
+      results.tags.length > 0);
 
   return (
     <div ref={ref} className="relative">
@@ -104,6 +113,25 @@ export function SearchBar() {
               ))}
             </div>
           )}
+          {results.tags.length > 0 && (
+            <div className="border-b border-border">
+              <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted">
+                Tags
+              </div>
+              <div className="px-3 pb-2 flex flex-wrap gap-1">
+                {results.tags.map((t) => (
+                  <Link
+                    key={t.id}
+                    href={`/documents?tag=${encodeURIComponent(t.name)}`}
+                    onClick={handleSelect}
+                    className="text-[10px] uppercase tracking-wider no-underline px-2 py-0.5 border border-border text-muted hover:border-foreground hover:text-foreground"
+                  >
+                    {t.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
           {results.documents.length > 0 && (
             <div>
               <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted">
@@ -122,7 +150,7 @@ export function SearchBar() {
               ))}
             </div>
           )}
-          {results.documents.length === 0 && results.companies.length === 0 && (
+          {!hasResults && (
             <div className="px-3 py-3 text-xs text-muted">No results</div>
           )}
         </div>

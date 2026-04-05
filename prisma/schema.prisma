@@ -68,16 +68,17 @@ model Company {
 }
 
 model Document {
-  id        String            @id @default(cuid())
-  slug      String            @unique
-  title     String
-  content   String
-  type      DocumentType
-  source    String            @default("web")
-  sourceRef String?
-  authorId  String
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  id           String            @id @default(cuid())
+  slug         String            @unique
+  title        String
+  content      String
+  type         DocumentType
+  source       String            @default("web")
+  sourceRef    String?
+  authorId     String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  searchVector Unsupported("tsvector")?
 
   author        User              @relation(fields: [authorId], references: [id])
   companies     DocumentCompany[]

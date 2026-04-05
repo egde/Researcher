@@ -56,13 +56,14 @@
 - [x] PDF upload endpoint (`POST /api/upload`) with pdf-parse text extraction (multipart form, 20MB limit)
 - [x] Shared `authenticateApiKey` helper for Bearer token auth
 
-## Phase 5 — Hierarchy Browsing + Search (PARTIALLY COMPLETE)
+## Phase 5 — Hierarchy Browsing + Search (COMPLETE)
 
 - [x] `GET /api/sectors` and `GET /api/regions` endpoints
-- [ ] `/sectors/[slug]` and `/regions/[slug]` pages
-- [ ] PostgreSQL tsvector full-text search replacing current ILIKE
-- [ ] Tag filtering on documents page
-- [ ] Enhanced search bar with category grouping
+- [x] `/sectors/[slug]` page — company table with conviction dots, doc/vote counts, breadcrumbs
+- [x] `/regions/[slug]` page — sectors with nested company tables, breadcrumbs
+- [x] PostgreSQL `tsvector` full-text search with GIN index, weighted ranking (title=A, content=B), prefix matching, auto-update trigger
+- [x] Tag filtering on documents page — popular tags bar with counts, active filter indicator, clear button
+- [x] Enhanced search bar with category grouping (Companies, Tags, Documents) and tag links
 
 ## Phase 6 — Social Features + Dashboard
 
