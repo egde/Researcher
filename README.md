@@ -143,7 +143,7 @@ impl User {
         if age > 150 {
             return Err(ValidationError::field("age", "must be <= 150"));
         }
-        if !email.contains(&"@".to_string()) {
+        if !email.contains(&"@") {
             return Err(ValidationError::field("email", "must contain @"));
         }
         Ok(Self { name, age, email })
@@ -197,12 +197,98 @@ fn modify(items: &mut Vec<i64>) {
 }
 ```
 
+When a function parameter uses `borrow[T]` or `mut[T]`, Copperhead automatically inserts `&` or `&mut` at call sites:
+
+```python
+def init_db(conn: borrow[Connection]):
+    conn.execute_batch("CREATE TABLE ...").expect("Failed")
+
+# At the call site, you write:
+init_db(conn)
+
+# Copperhead generates:
+# init_db(&conn);
+```
+
 | Wrapper | Rust | When to use |
 |---------|------|-------------|
 | `own[T]` | `T` | Function takes full ownership of the value |
 | `borrow[T]` | `&T` | Function only reads the value |
 | `mut[T]` | `&mut T` | Function needs to modify the value |
 | *(none)* | `T` | Default -- owned, inferred by the checker |
+
+### Using Rust Crates
+
+Any Rust crate declared in `copperhead.toml` can be imported and used. Copperhead applies **generic rules** -- it doesn't hardcode knowledge of any specific crate.
+
+#### Importing
+
+```python
+from copperhead.actix_web import web, App, HttpServer, HttpResponse
+from copperhead.rusqlite import Connection, params
+from copperhead.std.sync import Mutex
+```
+
+The prefix `copperhead.` is stripped and dots become `::`:
+
+```rust
+use actix_web::{web, App, HttpServer, HttpResponse};
+use rusqlite::Connection;
+use std::sync::Mutex;
+```
+
+#### Static method calls
+
+When a method is called on an uppercase name, `.` becomes `::`:
+
+```python
+conn = Connection.open(":memory:")     # → Connection::open(":memory:")
+id = Uuid.new_v4().to_string()         # → Uuid::new_v4().to_string()
+response = HttpResponse.Ok().json(obj) # → HttpResponse::Ok().json(obj)
+```
+
+Import aliases also trigger `::` resolution:
+
+```python
+from copperhead.actix_web import web
+web.get().to(handler)                  # → web::get().to(handler)
+web.Data.new(state)                    # → web::Data::new(state)
+```
+
+#### Struct initialization
+
+Keyword arguments to an uppercase name produce a struct literal:
+
+```python
+customer = Customer(id=id, name=name, email=email)
+# → Customer { id, name, email }
+
+data = AppState(db=Mutex.new(conn))
+# → AppState { db: Mutex::new(conn) }
+```
+
+When the field name matches the value, Copperhead uses Rust shorthand (`id` instead of `id: id`).
+
+#### Generic types
+
+Square brackets in type annotations become angle brackets:
+
+```python
+data: web.Data[AppState]    # → web::Data<AppState>
+db: Mutex[Connection]       # → Mutex<Connection>
+body: web.Json[Customer]    # → web::Json<Customer>
+```
+
+#### Macro calls
+
+Certain imports are recognized as Rust macros (currently `params` from rusqlite). They generate `crate::name![args]`:
+
+```python
+from copperhead.rusqlite import params
+
+db.execute("INSERT INTO ... VALUES (?1, ?2)", params(name, email))
+# → db.execute("INSERT ...", rusqlite::params![name, email])
+```
 
 ### Error Handling
 
@@ -242,6 +328,16 @@ for i in range(1, 100):
     print(i)
 ```
 
+### Async Functions
+
+```python
+async def fetch(url: str) -> str:
+    response = await get(url)
+    return response
+```
+
+When Copperhead detects `actix_web` imports, `async def main()` automatically gets the `#[actix_web::main]` attribute and a `-> std::io::Result<()>` return type.
+
 ### Python Builtins Mapping
 
 | Python | Rust |
@@ -252,6 +348,8 @@ for i in range(1, 100):
 | `range(a, b)` | `a..b` |
 | `abs(x)` | `x.abs()` |
 | `str(x)` | `x.to_string()` |
+| `int(x)` | `x as i64` |
+| `float(x)` | `x as f64` |
 | `s.upper()` | `s.to_uppercase()` |
 | `s.lower()` | `s.to_lowercase()` |
 | `s.strip()` | `s.trim().to_string()` |
@@ -272,7 +370,6 @@ my-project/
   src/
     main.cu.py          # Entry point
     models.cu.py        # Pydantic models
-    routes.cu.py         # Route handlers
 ```
 
 ### copperhead.toml
@@ -286,10 +383,22 @@ version = "0.1.0"
 requires = ["pydantic>=2.0"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
+actix-web = "4"
+serde = { version = "1", features = ["derive"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
 ```
 
-The `[dependencies]` section maps directly to Cargo dependencies in the generated Rust project.
+The `[dependencies]` section maps directly to Cargo dependencies in the generated Rust project. Add any crate here and import it with `from copperhead.X import ...`.
+
+### Multi-file builds
+
+When you run `copperhead build`, all `.cu.py` files in `src/` are parsed and merged into a single `main.rs`:
+
+1. Non-main files are processed first, then `main.cu.py`
+2. Imports are deduplicated
+3. Items are ordered: imports, then structs, then functions, then `main()`
+
+The output goes to `.copperhead/gen/src/main.rs` alongside a generated `Cargo.toml`.
 
 ## Examples
 
@@ -306,6 +415,11 @@ Try any example:
 ```bash
 copperhead transpile examples/hello.cu.py
 copperhead transpile examples/pydantic_models.cu.py
+
+# Build and run the full web API
+cd examples/customer_api
+copperhead build
+copperhead run
 ```
 
 ## Tutorial
@@ -323,7 +437,7 @@ See [Building a REST API with Copperhead](docs/tutorial-customer-api.md) for a s
                                          educational errors
 ```
 
-The compiler is written in Rust and uses `rustpython-parser` to parse Python source into an AST, then lowers it to a Copperhead-specific AST that captures ownership semantics and Pydantic model structure. The codegen pass emits idiomatic Rust source code.
+The compiler is written in Rust and uses `rustpython-parser` to parse Python source into an AST, then lowers it to a Copperhead-specific AST that captures ownership semantics, Pydantic model structure, and crate import mappings. The codegen pass emits idiomatic Rust source code.
 
 ## License
 

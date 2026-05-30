@@ -1,9 +1,12 @@
 from pydantic import BaseModel
+from copperhead import borrow, try_, Ok
 from copperhead.actix_web import web, App, HttpServer, HttpResponse
 from copperhead.rusqlite import Connection, params
 from copperhead.serde import Serialize, Deserialize
 from copperhead.uuid import Uuid
 from copperhead.std.sync import Mutex
+
+from models import Customer, CustomerCreate, CustomerUpdate, CustomerList
 
 
 class AppState:
@@ -30,7 +33,7 @@ async def list_customers(data: web.Data[AppState]) -> HttpResponse:
             phone=try_(row.get(3))
         ))
     ).unwrap().filter_map(lambda r: r.ok()).collect()
-    total = int(customers.len())
+    total = int(len(customers))
     return HttpResponse.Ok().json(CustomerList(customers=customers, total=total))
 
 

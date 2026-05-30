@@ -5,13 +5,14 @@ This tutorial walks through building a complete Customer CRUD API using Copperhe
 **What you'll build:**
 - A REST API with Create, Read, Update, Delete endpoints
 - Pydantic models with field validation
-- SQLite database storage
+- SQLite database storage (in-memory)
 - JSON request/response handling
 
 **What you'll learn:**
 - Defining types with Pydantic `BaseModel`
 - Using `Field()` constraints for validation
 - Writing `@field_validator` custom validators
+- Importing and using any Rust crate via `from copperhead.X import ...`
 - How Copperhead maps each Python concept to Rust
 
 ## Prerequisites
@@ -36,7 +37,7 @@ customer-api/
     main.cu.py
 ```
 
-Open `copperhead.toml` and add the dependencies we need:
+Open `copperhead.toml` and set up the dependencies:
 
 ```toml
 [project]
@@ -48,13 +49,15 @@ requires = ["pydantic>=2.0"]
 
 [dependencies]
 actix-web = "4"
-serde = { version = "1.0", features = ["derive"] }
+actix-rt = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["full"] }
 ```
 
-The `[dependencies]` section maps directly to Cargo.toml -- these are real Rust crates that the generated code will use.
+The `[dependencies]` section maps directly to Cargo.toml -- these are real Rust crates that the generated code will use. Copperhead doesn't hardcode knowledge of any crate; it uses **generic rules** to produce correct Rust for any dependency.
 
 ## Step 2: Define the Models
 
@@ -65,6 +68,7 @@ Create `src/models.cu.py`. This is where Pydantic shines -- you define your data
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+from copperhead.serde import Serialize, Deserialize
 
 
 class CustomerCreate(BaseModel):
@@ -126,38 +130,13 @@ def validate_email(cls, v: str) -> str:
 
 Copperhead translates this into validation logic inside the Rust constructor. The `raise ValueError(...)` becomes `return Err(ValidationError::field(...))`.
 
-### Customer -- the full entity (with ID)
+### The serde import
 
 ```python
-class Customer(BaseModel):
-    id: str
-    name: str
-    email: str
-    phone: Optional[str] = None
+from copperhead.serde import Serialize, Deserialize
 ```
 
-No constraints here -- this is the "read" model returned by the API.
-
-### CustomerUpdate -- partial updates
-
-```python
-class CustomerUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-```
-
-All fields are `Optional` because a PUT request only needs to include the fields being changed.
-
-### CustomerList -- paginated response
-
-```python
-class CustomerList(BaseModel):
-    customers: list[Customer]
-    total: int
-```
-
-`list[Customer]` becomes `Vec<Customer>` in Rust.
+This tells Copperhead that these models need JSON serialization. When this import is present, `BaseModel` structs get `#[derive(Serialize, Deserialize)]` in the generated Rust. The import itself becomes `use serde::{Serialize, Deserialize};`.
 
 ### See what Copperhead generates
 
@@ -170,7 +149,9 @@ copperhead transpile src/models.cu.py
 Output:
 
 ```rust
-#[derive(Debug, Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct CustomerCreate {
     name: String,
     email: String,
@@ -185,7 +166,7 @@ impl CustomerCreate {
         if name.len() > 100 {
             return Err(ValidationError::field("name", "length must be <= 100"));
         }
-        if !email.contains(&"@".to_string()) {
+        if !email.contains(&"@") {
             return Err(ValidationError::field("email", "invalid email address"));
         }
         Ok(Self {
@@ -196,7 +177,7 @@ impl CustomerCreate {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Customer {
     id: String,
     name: String,
@@ -215,454 +196,214 @@ impl Customer {
     }
 }
 
-#[derive(Debug, Clone)]
-struct CustomerUpdate {
-    name: Option<String>,
-    email: Option<String>,
-    phone: Option<String>,
-}
-
-impl CustomerUpdate {
-    fn new() -> Self {
-        Self {
-            name: None,
-            email: None,
-            phone: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct CustomerList {
-    customers: Vec<Customer>,
-    total: i64,
-}
-
-impl CustomerList {
-    fn new(customers: Vec<Customer>, total: i64) -> Self {
-        Self {
-            customers,
-            total,
-        }
-    }
-}
+// ... CustomerUpdate and CustomerList follow the same pattern
 ```
 
 Notice how:
+- `from copperhead.serde import Serialize, Deserialize` became `use serde::{Serialize, Deserialize};` and added derive macros
 - `Field(min_length=1, max_length=100)` became two `if` checks in `new()`
 - `@field_validator` became an inline validation check
 - `Optional[str] = None` became `Option<String>` with a default of `None`
 - `list[Customer]` became `Vec<Customer>`
 - Models without constraints get a simple constructor, while constrained models return `Result<Self, ValidationError>`
 
-## Step 3: Understand the Pydantic-to-Rust Mapping
+## Step 3: Write the Server
 
-Here's the complete mapping table for reference:
+Create `src/main.cu.py`. This file contains the application state, database setup, route handlers, and entry point.
 
-| Pydantic (Python) | Rust Output |
+### Imports
+
+```python
+from pydantic import BaseModel
+from copperhead.actix_web import web, App, HttpServer, HttpResponse
+from copperhead.rusqlite import Connection, params
+from copperhead.serde import Serialize, Deserialize
+from copperhead.uuid import Uuid
+from copperhead.std.sync import Mutex
+```
+
+Every `from copperhead.X import ...` statement becomes a Rust `use` statement. The naming follows a simple rule: `copperhead.` is stripped, dots become `::`:
+
+| Python import | Rust `use` |
 |---|---|
-| `class Foo(BaseModel)` | `struct Foo { ... }` |
-| `field: int` | `field: i64` |
-| `field: str` | `field: String` |
-| `field: float` | `field: f64` |
-| `field: bool` | `field: bool` |
-| `field: Optional[T]` | `field: Option<T>` |
-| `field: list[T]` | `field: Vec<T>` |
-| `field: dict[K, V]` | `field: HashMap<K, V>` |
-| `Field(default=x)` | field with default value in constructor |
-| `Field(ge=0, le=100)` | validation checks in `new()` |
-| `Field(min_length=1)` | `.len()` check in `new()` |
-| `@field_validator` | validation logic inlined in `new()` |
-| `Optional[T] = None` | `Option<T>` field, excluded from constructor params |
-| Nested `BaseModel` | Owned nested struct field |
+| `from copperhead.actix_web import web, App` | `use actix_web::{web, App};` |
+| `from copperhead.rusqlite import Connection` | `use rusqlite::Connection;` |
+| `from copperhead.std.sync import Mutex` | `use std::sync::Mutex;` |
 
-## Step 4: Build the Route Handlers
-
-Create `src/routes.cu.py`. This defines the API endpoints using Copperhead's web framework integration:
+### Application state
 
 ```python
-# src/routes.cu.py
-
-from copperhead import async_fn, borrow, mut, own, Result, Ok, Err
-import copperhead.actix_web as web
-from models import Customer, CustomerCreate, CustomerUpdate, CustomerList
-
-
-@async_fn
-@web.get("/customers")
-async def list_customers(db: borrow[web.Data[DbPool]]) -> web.Json[CustomerList]:
-    customers = await db.query_all("SELECT * FROM customers")
-    return web.Json(CustomerList(customers=customers, total=len(customers)))
-
-
-@async_fn
-@web.post("/customers")
-async def create_customer(
-    db: borrow[web.Data[DbPool]],
-    body: web.Json[CustomerCreate],
-) -> Result[web.Json[Customer], web.Error]:
-    customer = await db.insert("customers", body.into_inner())
-    return Ok(web.Json(customer))
-
-
-@async_fn
-@web.get("/customers/{id}")
-async def get_customer(
-    db: borrow[web.Data[DbPool]],
-    path: web.Path[str],
-) -> Result[web.Json[Customer], web.Error]:
-    customer = await db.query_one(
-        "SELECT * FROM customers WHERE id = $1",
-        path.into_inner()
-    )
-    match customer:
-        case Some(c):
-            return Ok(web.Json(c))
-        case None_:
-            return Err(web.Error.not_found("customer not found"))
-
-
-@async_fn
-@web.put("/customers/{id}")
-async def update_customer(
-    db: borrow[web.Data[DbPool]],
-    path: web.Path[str],
-    body: web.Json[CustomerUpdate],
-) -> Result[web.Json[Customer], web.Error]:
-    updated = await db.update("customers", path.into_inner(), body.into_inner())
-    return Ok(web.Json(updated))
-
-
-@async_fn
-@web.delete("/customers/{id}")
-async def delete_customer(
-    db: borrow[web.Data[DbPool]],
-    path: web.Path[str],
-) -> Result[web.HttpResponse, web.Error]:
-    await db.delete("customers", path.into_inner())
-    return Ok(web.HttpResponse.no_content())
+class AppState:
+    db: Mutex[Connection]
 ```
 
-Each route handler maps to an Actix-web async handler in Rust:
+A plain class (not extending `BaseModel`) becomes a simple Rust struct without constructors or serde derives. `Mutex[Connection]` becomes `Mutex<Connection>` in Rust.
 
-- `@web.get("/customers")` becomes `#[get("/customers")]` in Rust
-- `web.Json[CustomerCreate]` becomes `web::Json<CustomerCreate>` (actix extractor)
-- `web.Path[str]` becomes `web::Path<String>`
-- `web.Data[DbPool]` becomes `web::Data<DbPool>` (shared application state)
-- `Result[web.Json[Customer], web.Error]` becomes `Result<HttpResponse, Error>`
-
-## Step 5: Write the Entry Point
-
-Create `src/main.cu.py`:
+### Error response
 
 ```python
-# src/main.cu.py
-
-from copperhead import async_fn
-import copperhead.actix_web as web
-from routes import (
-    list_customers,
-    create_customer,
-    get_customer,
-    update_customer,
-    delete_customer,
-)
-
-
-@async_fn
-async def main():
-    db = web.Data(DbPool.connect("sqlite://customers.db"))
-    app = web.App()
-    app.app_data(db)
-    app.service(list_customers)
-    app.service(create_customer)
-    app.service(get_customer)
-    app.service(update_customer)
-    app.service(delete_customer)
-    web.serve(app, "127.0.0.1:8080")
+class ErrorResponse(BaseModel):
+    error: str
 ```
 
-This sets up an Actix-web server on port 8080, connects to a SQLite database, and registers all the CRUD routes.
+This extends `BaseModel` so it gets `Serialize, Deserialize` derives, allowing it to be returned as JSON.
 
-## Step 6: What the Generated Rust Looks Like
+### Database initialization
 
-Here's the complete Rust server that Copperhead generates from the three `.cu.py` files above. This is what you'd see in `.copperhead/gen/src/main.rs` after running `copperhead build`:
-
-```rust
-use actix_web::{web, App, HttpServer, HttpResponse};
-use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-use uuid::Uuid;
-
-// ── Models (from models.cu.py) ──────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CustomerCreate {
-    name: String,
-    email: String,
-    phone: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Customer {
-    id: String,
-    name: String,
-    email: String,
-    phone: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CustomerUpdate {
-    name: Option<String>,
-    email: Option<String>,
-    phone: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CustomerList {
-    customers: Vec<Customer>,
-    total: i64,
-}
-
-#[derive(Debug, Serialize)]
-struct ValidationError {
-    field: String,
-    message: String,
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-// ── Validation (from Field() + @field_validator) ────────────────────────
-
-impl CustomerCreate {
-    fn validate(&self) -> Result<(), ValidationError> {
-        if self.name.is_empty() {
-            return Err(ValidationError {
-                field: "name".to_string(),
-                message: "length must be >= 1".to_string(),
-            });
-        }
-        if self.name.len() > 100 {
-            return Err(ValidationError {
-                field: "name".to_string(),
-                message: "length must be <= 100".to_string(),
-            });
-        }
-        if !self.email.contains('@') {
-            return Err(ValidationError {
-                field: "email".to_string(),
-                message: "invalid email address".to_string(),
-            });
-        }
-        Ok(())
-    }
-}
-
-// ── Database ────────────────────────────────────────────────────────────
-
-struct AppState {
-    db: Mutex<Connection>,
-}
-
-fn init_db(conn: &Connection) {
+```python
+def init_db(conn: borrow[Connection]):
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS customers (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            phone TEXT
-        )"
-    ).expect("Failed to create table");
-}
+        "CREATE TABLE IF NOT EXISTS customers (...)"
+    ).expect("Failed to create table")
+```
 
-// ── Route handlers (from routes.cu.py) ──────────────────────────────────
+The `borrow[Connection]` type annotation tells Copperhead to generate `conn: &Connection`. When `init_db` is called elsewhere, Copperhead automatically inserts `&` at the call site.
 
-async fn list_customers(data: web::Data<AppState>) -> HttpResponse {
-    let db = data.db.lock().unwrap();
-    let mut stmt = db
-        .prepare("SELECT id, name, email, phone FROM customers")
-        .unwrap();
-    let customers: Vec<Customer> = stmt
-        .query_map([], |row| {
-            Ok(Customer {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                email: row.get(2)?,
-                phone: row.get(3)?,
-            })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
-    let total = customers.len() as i64;
-    HttpResponse::Ok().json(CustomerList { customers, total })
-}
+### Route handlers
 
-async fn create_customer(
-    data: web::Data<AppState>,
-    body: web::Json<CustomerCreate>,
-) -> HttpResponse {
-    if let Err(e) = body.validate() {
-        return HttpResponse::BadRequest().json(e);
-    }
+Here's the full `list_customers` handler:
 
-    let id = Uuid::new_v4().to_string();
-    let customer = Customer {
-        id: id.clone(),
-        name: body.name.clone(),
-        email: body.email.clone(),
-        phone: body.phone.clone(),
-    };
+```python
+async def list_customers(data: web.Data[AppState]) -> HttpResponse:
+    db = data.db.lock().unwrap()
+    customers: list[Customer] = db.prepare(
+        "SELECT id, name, email, phone FROM customers"
+    ).unwrap().query_map(
+        [], lambda row: Ok(Customer(
+            id=try_(row.get(0)),
+            name=try_(row.get(1)),
+            email=try_(row.get(2)),
+            phone=try_(row.get(3))
+        ))
+    ).unwrap().filter_map(lambda r: r.ok()).collect()
+    total = int(customers.len())
+    return HttpResponse.Ok().json(CustomerList(customers=customers, total=total))
+```
 
-    let db = data.db.lock().unwrap();
+Key patterns at work:
+
+- **`web.Data[AppState]`** -- `web` is an import alias from `copperhead.actix_web`, so the type becomes `web::Data<AppState>`
+- **`HttpResponse.Ok()`** -- `HttpResponse` starts with uppercase, so `.` becomes `::` giving `HttpResponse::Ok()`
+- **`Customer(id=..., name=...)`** -- keyword args to an uppercase name become a struct literal: `Customer { id: ..., name: ... }`
+- **`lambda row: Ok(...)`** -- becomes a Rust closure: `|row| Ok(...)`
+- **`try_(row.get(0))`** -- becomes the `?` operator: `row.get(0)?`
+- **`params(id)`** -- `params` is a known macro imported from `copperhead.rusqlite`, so it becomes `rusqlite::params![id]`
+
+### The CRUD handlers
+
+```python
+async def create_customer(
+    data: web.Data[AppState],
+    body: web.Json[CustomerCreate],
+) -> HttpResponse:
+    id = Uuid.new_v4().to_string()
+    customer = Customer(
+        id=id.clone(), name=body.name.clone(),
+        email=body.email.clone(), phone=body.phone.clone(),
+    )
+
+    db = data.db.lock().unwrap()
     db.execute(
         "INSERT INTO customers (id, name, email, phone) VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![
-            customer.id, customer.name, customer.email, customer.phone
-        ],
-    ).unwrap();
+        params(customer.id, customer.name, customer.email, customer.phone),
+    ).unwrap()
 
-    HttpResponse::Created().json(customer)
-}
-
-async fn get_customer(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-) -> HttpResponse {
-    let id = path.into_inner();
-    let db = data.db.lock().unwrap();
-    let result = db.query_row(
-        "SELECT id, name, email, phone FROM customers WHERE id = ?1",
-        rusqlite::params![id],
-        |row| {
-            Ok(Customer {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                email: row.get(2)?,
-                phone: row.get(3)?,
-            })
-        },
-    );
-
-    match result {
-        Ok(customer) => HttpResponse::Ok().json(customer),
-        Err(_) => HttpResponse::NotFound().json(ErrorResponse {
-            error: "customer not found".to_string(),
-        }),
-    }
-}
-
-async fn update_customer(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-    body: web::Json<CustomerUpdate>,
-) -> HttpResponse {
-    let id = path.into_inner();
-    let db = data.db.lock().unwrap();
-
-    let existing = db.query_row(
-        "SELECT id, name, email, phone FROM customers WHERE id = ?1",
-        rusqlite::params![id],
-        |row| {
-            Ok(Customer {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                email: row.get(2)?,
-                phone: row.get(3)?,
-            })
-        },
-    );
-
-    match existing {
-        Ok(mut customer) => {
-            if let Some(ref name) = body.name {
-                customer.name = name.clone();
-            }
-            if let Some(ref email) = body.email {
-                customer.email = email.clone();
-            }
-            if body.phone.is_some() {
-                customer.phone = body.phone.clone();
-            }
-
-            db.execute(
-                "UPDATE customers SET name = ?1, email = ?2, phone = ?3 WHERE id = ?4",
-                rusqlite::params![
-                    customer.name, customer.email, customer.phone, customer.id
-                ],
-            ).unwrap();
-
-            HttpResponse::Ok().json(customer)
-        }
-        Err(_) => HttpResponse::NotFound().json(ErrorResponse {
-            error: "customer not found".to_string(),
-        }),
-    }
-}
-
-async fn delete_customer(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-) -> HttpResponse {
-    let id = path.into_inner();
-    let db = data.db.lock().unwrap();
-    let rows = db.execute(
-        "DELETE FROM customers WHERE id = ?1",
-        rusqlite::params![id],
-    ).unwrap();
-
-    if rows == 0 {
-        HttpResponse::NotFound().json(ErrorResponse {
-            error: "customer not found".to_string(),
-        })
-    } else {
-        HttpResponse::NoContent().finish()
-    }
-}
-
-// ── Main (from main.cu.py) ──────────────────────────────────────────────
-
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let conn = Connection::open(":memory:")
-        .expect("Failed to open database");
-    init_db(&conn);
-
-    let data = web::Data::new(AppState {
-        db: Mutex::new(conn),
-    });
-
-    println!("Starting server at http://127.0.0.1:8080");
-
-    HttpServer::new(move || {
-        App::new()
-            .app_data(data.clone())
-            .route("/customers", web::get().to(list_customers))
-            .route("/customers", web::post().to(create_customer))
-            .route("/customers/{id}", web::get().to(get_customer))
-            .route("/customers/{id}", web::put().to(update_customer))
-            .route("/customers/{id}", web::delete().to(delete_customer))
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
-}
+    return HttpResponse.Created().json(customer)
 ```
 
-## Step 7: Build and Run
+- `Uuid.new_v4()` becomes `Uuid::new_v4()` (static method call)
+- `params(...)` becomes `rusqlite::params![...]` (macro expansion)
+- `HttpResponse.Created()` becomes `HttpResponse::Created()`
+
+```python
+async def update_customer(
+    data: web.Data[AppState],
+    path: web.Path[str],
+    body: web.Json[CustomerUpdate],
+) -> HttpResponse:
+    id = path.into_inner()
+    db = data.db.lock().unwrap()
+
+    existing = db.query_row(...)
+
+    if existing.is_err():
+        return HttpResponse.NotFound().json(ErrorResponse(error="customer not found"))
+
+    customer = existing.unwrap()
+    if body.name.is_some():
+        customer.name = body.name.clone().unwrap()
+    if body.email.is_some():
+        customer.email = body.email.clone().unwrap()
+    if body.phone.is_some():
+        customer.phone = body.phone.clone()
+
+    db.execute(...)
+    return HttpResponse.Ok().json(customer)
+```
+
+Notice that `customer` is assigned and later has its fields modified. Copperhead detects this pattern and automatically generates `let mut customer` in the Rust output.
+
+### Entry point
+
+```python
+async def main():
+    conn = Connection.open(":memory:").expect("Failed to open database")
+    init_db(conn)
+
+    data = web.Data.new(AppState(db=Mutex.new(conn)))
+
+    print("Starting server at http://127.0.0.1:8080")
+
+    server = HttpServer.new(lambda: App.new()
+        .app_data(data.clone())
+        .route("/customers", web.get().to(list_customers))
+        .route("/customers", web.post().to(create_customer))
+        .route("/customers/{id}", web.get().to(get_customer))
+        .route("/customers/{id}", web.put().to(update_customer))
+        .route("/customers/{id}", web.delete().to(delete_customer))
+    )
+    await try_(server.bind("127.0.0.1:8080")).run()
+```
+
+Several things happen automatically here:
+
+- `Connection.open(...)` becomes `Connection::open(...)` (static call)
+- `web.Data.new(...)` becomes `web::Data::new(...)` (chained module path)
+- `AppState(db=Mutex.new(conn))` becomes `AppState { db: Mutex::new(conn) }` (struct init)
+- `init_db(conn)` becomes `init_db(&conn)` (auto borrow insertion based on function signature)
+- The lambda in `HttpServer.new(...)` gets a `move` keyword: `HttpServer::new(move || ...)`
+- When Copperhead detects `actix_web` imports, `async def main()` becomes `#[actix_web::main] async fn main() -> std::io::Result<()>`
+- `await try_(server.bind(...)).run()` becomes `server.bind(...)?.run().await`
+
+## Step 4: Build and Run
 
 ```bash
 copperhead build
+```
+
+This does three things:
+1. Parses all `.cu.py` files in `src/`
+2. Merges them into a single `main.rs` (imports first, then structs, then functions, main last)
+3. Generates a `Cargo.toml` from `copperhead.toml` and runs `cargo build`
+
+The output lands in `.copperhead/gen/`:
+
+```
+.copperhead/gen/
+  Cargo.toml
+  src/
+    main.rs
+```
+
+To run the server:
+
+```bash
 copperhead run
 ```
 
 The server starts at `http://127.0.0.1:8080`.
 
-## Step 8: Test the API
+## Step 5: Test the API
 
 Open another terminal and test with curl:
 
@@ -772,42 +513,6 @@ curl -s -o /dev/null -w "%{http_code}" \
 
 A successful delete returns HTTP 204 No Content.
 
-## Step 9: Test Validation
-
-The Pydantic `Field()` constraints and `@field_validator` produce real validation errors:
-
-### Empty name (violates `min_length=1`)
-
-```bash
-curl -s -X POST http://127.0.0.1:8080/customers \
-  -H "Content-Type: application/json" \
-  -d '{"name": "", "email": "test@example.com"}' \
-  | python3 -m json.tool
-```
-
-```json
-{
-    "field": "name",
-    "message": "length must be >= 1"
-}
-```
-
-### Invalid email (violates `@field_validator`)
-
-```bash
-curl -s -X POST http://127.0.0.1:8080/customers \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Test", "email": "not-an-email"}' \
-  | python3 -m json.tool
-```
-
-```json
-{
-    "field": "email",
-    "message": "invalid email address"
-}
-```
-
 ### Nonexistent customer (404)
 
 ```bash
@@ -821,33 +526,191 @@ curl -s http://127.0.0.1:8080/customers/nonexistent-id \
 }
 ```
 
+## Step 6: Understanding the Transpilation Rules
+
+Copperhead uses a set of **generic rules** to produce correct Rust from `.cu.py` files. It does not hardcode knowledge of specific crates -- the same rules work for Actix-web, rusqlite, or any other Rust library.
+
+### The complete rule table
+
+| Python pattern | Rust output | Rule |
+|---|---|---|
+| `from copperhead.X import A, B` | `use X::{A, B};` | **crate-import** |
+| `from copperhead.X.Y import A` | `use X::Y::A;` | **nested-crate-import** |
+| `Connection.open(x)` | `Connection::open(x)` | **static-method** (uppercase `.` becomes `::`) |
+| `web.Data.new(x)` | `web::Data::new(x)` | **module-path** (import alias `.` becomes `::`) |
+| `Customer(id=x, name=y)` | `Customer { id: x, name: y }` | **struct-init** (uppercase + kwargs) |
+| `web.Data[T]` in type | `web::Data<T>` | **dotted-generic** |
+| `Mutex[Connection]` in type | `Mutex<Connection>` | **generic-type** |
+| `params(a, b, c)` | `rusqlite::params![a, b, c]` | **macro-import** |
+| `lambda row: expr` | `\|row\| expr` | **lambda** |
+| `try_(expr)` | `expr?` | **try-operator** |
+| `borrow[T]` parameter | `&T` + auto `&` at call site | **borrow-insertion** |
+| `x.field = val` after `x = ...` | `let mut x = ...` | **mutable-detection** |
+| `async def main()` with actix imports | `#[actix_web::main] async fn main()` | **web-main** |
+| `class Foo(BaseModel)` with serde | `#[derive(Serialize, Deserialize)]` | **serde-derives** |
+| `class Foo:` (plain) | `#[derive(Debug)]` struct | **plain-class** |
+
+### How module paths are resolved
+
+The transpiler tracks which names are **import aliases** (came from `copperhead.*` imports). When such a name appears as the base of an attribute access:
+
+- `web` imported from `copperhead.actix_web` -- `web.get()` becomes `web::get()`
+- `data` is a local variable -- `data.db` stays as `data.db`
+
+Names starting with an uppercase letter also trigger `::` resolution: `HttpResponse.Ok()` becomes `HttpResponse::Ok()`.
+
+## Step 7: What the Generated Rust Looks Like
+
+After running `copperhead build`, the merged output in `.copperhead/gen/src/main.rs` looks like this (reformatted for clarity):
+
+```rust
+use actix_web::{web, App, HttpServer, HttpResponse};
+use rusqlite::Connection;
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use std::sync::Mutex;
+
+// -- Models (from models.cu.py) --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CustomerCreate {
+    name: String,
+    email: String,
+    phone: Option<String>,
+}
+
+impl CustomerCreate {
+    fn new(name: String, email: String) -> Result<Self, ValidationError> {
+        if name.len() < 1 {
+            return Err(ValidationError::field("name", "length must be >= 1"));
+        }
+        if name.len() > 100 {
+            return Err(ValidationError::field("name", "length must be <= 100"));
+        }
+        if !email.contains(&"@") {
+            return Err(ValidationError::field("email", "invalid email address"));
+        }
+        Ok(Self { name, email, phone: None })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Customer {
+    id: String,
+    name: String,
+    email: String,
+    phone: Option<String>,
+}
+
+// ... other model structs ...
+
+#[derive(Debug)]
+struct AppState {
+    db: Mutex<Connection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+// -- Handlers (from main.cu.py) --
+
+fn init_db(conn: &Connection) {
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS customers (...)").expect("Failed to create table");
+}
+
+async fn list_customers(data: web::Data<AppState>) -> HttpResponse {
+    let db = data.db.lock().unwrap();
+    let customers: Vec<Customer> = db.prepare("SELECT id, name, email, phone FROM customers")
+        .unwrap()
+        .query_map([], |row| Ok(Customer {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            email: row.get(2)?,
+            phone: row.get(3)?,
+        }))
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+    let total = customers.len() as i64;
+    return HttpResponse::Ok().json(CustomerList { customers, total });
+}
+
+async fn create_customer(
+    data: web::Data<AppState>,
+    body: web::Json<CustomerCreate>,
+) -> HttpResponse {
+    let id = Uuid::new_v4().to_string();
+    let customer = Customer {
+        id: id.clone(),
+        name: body.name.clone(),
+        email: body.email.clone(),
+        phone: body.phone.clone(),
+    };
+    let db = data.db.lock().unwrap();
+    db.execute(
+        "INSERT INTO customers (id, name, email, phone) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![customer.id, customer.name, customer.email, customer.phone],
+    ).unwrap();
+    return HttpResponse::Created().json(customer);
+}
+
+// ... get_customer, update_customer, delete_customer follow the same pattern ...
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let conn = Connection::open(":memory:").expect("Failed to open database");
+    init_db(&conn);
+    let data = web::Data::new(AppState { db: Mutex::new(conn) });
+    println!("{}", "Starting server at http://127.0.0.1:8080");
+    HttpServer::new(move || App::new()
+        .app_data(data.clone())
+        .route("/customers", web::get().to(list_customers))
+        .route("/customers", web::post().to(create_customer))
+        .route("/customers/{id}", web::get().to(get_customer))
+        .route("/customers/{id}", web::put().to(update_customer))
+        .route("/customers/{id}", web::delete().to(delete_customer))
+    )
+    .bind("127.0.0.1:8080")?
+    .run()
+    .await;
+    Ok(())
+}
+```
+
 ## How It All Connects
 
 Here's a summary of how each Python concept maps to the final Rust API:
 
 | You write (Python) | Copperhead generates (Rust) |
 |---|---|
-| `class CustomerCreate(BaseModel)` | `struct CustomerCreate { ... }` with `#[derive(Serialize, Deserialize)]` |
-| `name: str = Field(min_length=1)` | `if self.name.is_empty() { return Err(...) }` |
+| `from copperhead.actix_web import web` | `use actix_web::web;` |
+| `class Customer(BaseModel)` | `struct Customer { ... }` with `#[derive(Serialize, Deserialize)]` |
+| `class AppState:` (no BaseModel) | `struct AppState { ... }` with `#[derive(Debug)]` only |
+| `name: str = Field(min_length=1)` | `if name.len() < 1 { return Err(...) }` in constructor |
 | `@field_validator("email")` | Inline validation in the constructor |
 | `Optional[str] = None` | `phone: Option<String>` excluded from required params |
 | `list[Customer]` | `Vec<Customer>` |
-| `@web.post("/customers")` | `web::post().to(create_customer)` route |
-| `web.Json[CustomerCreate]` | `web::Json<CustomerCreate>` actix extractor |
-| `web.Path[str]` | `web::Path<String>` path parameter |
-| `DbPool.connect("sqlite://...")` | `Connection::open(...)` via rusqlite |
+| `web.Data[AppState]` | `web::Data<AppState>` |
+| `HttpResponse.Ok()` | `HttpResponse::Ok()` |
+| `Customer(id=x, name=y)` | `Customer { id: x, name: y }` |
+| `params(a, b)` | `rusqlite::params![a, b]` |
+| `lambda row: Ok(...)` | `\|row\| Ok(...)` |
+| `try_(expr)` | `expr?` |
+| `borrow[Connection]` | `&Connection` + auto `&` at call site |
+| `async def main()` | `#[actix_web::main] async fn main() -> std::io::Result<()>` |
 
 ## Next Steps
 
 - Add more models (orders, products) following the same `BaseModel` pattern
-- Add authentication middleware
 - Switch from in-memory SQLite to a file (`"customers.db"` instead of `":memory:"`)
-- Use `copperhead graduate` to view the pure Rust equivalent of any `.cu.py` file
-- Run `.cu.py` files directly with CPython + Pydantic for quick testing before compiling
+- Add authentication middleware
+- Use any Rust crate -- just add it to `[dependencies]` in `copperhead.toml` and import with `from copperhead.X import ...`
 
 ## Full Source
 
 The complete example is in the repository at:
 
-- **Copperhead source:** `examples/customer_api/`
-- **Generated Rust server:** `examples/customer_api_generated/`
+- **Copperhead source:** `examples/customer_api/src/models.cu.py` and `examples/customer_api/src/main.cu.py`
+- **Generated Rust:** run `copperhead build` in `examples/customer_api/` to see `.copperhead/gen/src/main.rs`
