@@ -75,14 +75,17 @@ fn lower_subscript_type(value: &py::Expr, slice: &py::Expr) -> CopperheadType {
             CopperheadType::List(Box::new(inner))
         }
         "dict" => {
-            if let py::Expr::Tuple(t) = slice {
-                if t.elts.len() == 2 {
-                    let key = lower_copperhead_type(&t.elts[0]);
-                    let val = lower_copperhead_type(&t.elts[1]);
-                    return CopperheadType::Dict(Box::new(key), Box::new(val));
-                }
+            if let py::Expr::Tuple(t) = slice
+                && t.elts.len() == 2
+            {
+                let key = lower_copperhead_type(&t.elts[0]);
+                let val = lower_copperhead_type(&t.elts[1]);
+                return CopperheadType::Dict(Box::new(key), Box::new(val));
             }
-            CopperheadType::Dict(Box::new(CopperheadType::Unknown), Box::new(CopperheadType::Unknown))
+            CopperheadType::Dict(
+                Box::new(CopperheadType::Unknown),
+                Box::new(CopperheadType::Unknown),
+            )
         }
         "set" => {
             let inner = lower_copperhead_type(slice);
@@ -93,14 +96,17 @@ fn lower_subscript_type(value: &py::Expr, slice: &py::Expr) -> CopperheadType {
             CopperheadType::Optional(Box::new(inner))
         }
         "Result" => {
-            if let py::Expr::Tuple(t) = slice {
-                if t.elts.len() == 2 {
-                    let ok = lower_copperhead_type(&t.elts[0]);
-                    let err = lower_copperhead_type(&t.elts[1]);
-                    return CopperheadType::Result(Box::new(ok), Box::new(err));
-                }
+            if let py::Expr::Tuple(t) = slice
+                && t.elts.len() == 2
+            {
+                let ok = lower_copperhead_type(&t.elts[0]);
+                let err = lower_copperhead_type(&t.elts[1]);
+                return CopperheadType::Result(Box::new(ok), Box::new(err));
             }
-            CopperheadType::Result(Box::new(CopperheadType::Unknown), Box::new(CopperheadType::Unknown))
+            CopperheadType::Result(
+                Box::new(CopperheadType::Unknown),
+                Box::new(CopperheadType::Unknown),
+            )
         }
         "Option" => {
             let inner = lower_copperhead_type(slice);

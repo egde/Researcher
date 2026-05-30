@@ -1,7 +1,7 @@
-pub mod init;
 pub mod build;
-pub mod run;
 pub mod check;
+pub mod init;
+pub mod run;
 pub mod transpile;
 
 use clap::{Parser, Subcommand};

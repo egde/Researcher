@@ -1,11 +1,11 @@
 use std::fs;
 
-use crate::parser;
 use crate::codegen;
+use crate::parser;
 
 pub fn run(file: &str) -> Result<(), String> {
-    let source = fs::read_to_string(file)
-        .map_err(|e| format!("Failed to read '{}': {}", file, e))?;
+    let source =
+        fs::read_to_string(file).map_err(|e| format!("Failed to read '{}': {}", file, e))?;
 
     let module = parser::parse_module(&source, file)?;
     let rust_code = codegen::generate_module(&module);

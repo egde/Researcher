@@ -1,5 +1,5 @@
-use copperhead::parser;
 use copperhead::codegen;
+use copperhead::parser;
 
 fn transpile(source: &str) -> String {
     let module = parser::parse_module(source, "test.cu.py").unwrap();

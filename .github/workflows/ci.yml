@@ -6,94 +6,30 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  lint:
-    name: Lint
+  check:
+    name: Check, Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 22
-          cache: npm
+          components: rustfmt, clippy
 
-      - run: npm ci
+      - uses: Swatinem/rust-cache@v2
 
-      - run: npx prisma generate
+      - name: Check formatting
+        run: cargo fmt --check
 
-      - run: npm run lint
+      - name: Clippy
+        run: cargo clippy -- -D warnings
 
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run tests
+        run: cargo test
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - run: npx prisma generate
-
-      - run: npx tsc --noEmit
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [lint, typecheck]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - run: npx prisma generate
-
-      - run: npm run build
-        env:
-          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
-
-  migrate:
-    name: Validate Migrations
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: researcher_wiki_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U test"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - name: Run migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: "postgresql://test:test@localhost:5432/researcher_wiki_test?schema=public"
-
-      - name: Seed database
-        run: npx tsx prisma/seed.ts
-        env:
-          DATABASE_URL: "postgresql://test:test@localhost:5432/researcher_wiki_test?schema=public"
+      - name: Build
+        run: cargo build

@@ -185,13 +185,9 @@ fn map_builtin_call(func: &str, args: &[Expr]) -> Option<String> {
                 ))
             }
         }
-        "len" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{}.len()", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "len" => args
+            .first()
+            .map(|arg| format!("{}.len()", generate_expr(arg))),
         "range" => match args.len() {
             1 => Some(format!("0..{}", generate_expr(&args[0]))),
             2 => Some(format!(
@@ -207,41 +203,21 @@ fn map_builtin_call(func: &str, args: &[Expr]) -> Option<String> {
             )),
             _ => None,
         },
-        "int" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{} as i64", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
-        "float" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{} as f64", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
-        "str" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{}.to_string()", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
-        "abs" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{}.abs()", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
-        "enumerate" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{}.iter().enumerate()", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "int" => args
+            .first()
+            .map(|arg| format!("{} as i64", generate_expr(arg))),
+        "float" => args
+            .first()
+            .map(|arg| format!("{} as f64", generate_expr(arg))),
+        "str" => args
+            .first()
+            .map(|arg| format!("{}.to_string()", generate_expr(arg))),
+        "abs" => args
+            .first()
+            .map(|arg| format!("{}.abs()", generate_expr(arg))),
+        "enumerate" => args
+            .first()
+            .map(|arg| format!("{}.iter().enumerate()", generate_expr(arg))),
         "zip" => {
             if args.len() == 2 {
                 Some(format!(
@@ -263,13 +239,9 @@ fn map_builtin_call(func: &str, args: &[Expr]) -> Option<String> {
 
 fn map_method_call(obj: &str, method: &str, args: &[Expr]) -> Option<String> {
     match method {
-        "append" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{obj}.push({})", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "append" => args
+            .first()
+            .map(|arg| format!("{obj}.push({})", generate_expr(arg))),
         "pop" => {
             if args.is_empty() {
                 Some(format!("{obj}.pop()"))
@@ -277,32 +249,20 @@ fn map_method_call(obj: &str, method: &str, args: &[Expr]) -> Option<String> {
                 None
             }
         }
-        "extend" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{obj}.extend({})", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "extend" => args
+            .first()
+            .map(|arg| format!("{obj}.extend({})", generate_expr(arg))),
         "upper" => Some(format!("{obj}.to_uppercase()")),
         "lower" => Some(format!("{obj}.to_lowercase()")),
         "strip" => Some(format!("{obj}.trim().to_string()")),
         "lstrip" => Some(format!("{obj}.trim_start().to_string()")),
         "rstrip" => Some(format!("{obj}.trim_end().to_string()")),
-        "startswith" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{obj}.starts_with({})", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
-        "endswith" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{obj}.ends_with({})", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "startswith" => args
+            .first()
+            .map(|arg| format!("{obj}.starts_with({})", generate_expr(arg))),
+        "endswith" => args
+            .first()
+            .map(|arg| format!("{obj}.ends_with({})", generate_expr(arg))),
         "split" => {
             if let Some(arg) = args.first() {
                 Some(format!(
@@ -310,18 +270,12 @@ fn map_method_call(obj: &str, method: &str, args: &[Expr]) -> Option<String> {
                     generate_expr(arg)
                 ))
             } else {
-                Some(format!(
-                    "{obj}.split_whitespace().collect::<Vec<&str>>()"
-                ))
+                Some(format!("{obj}.split_whitespace().collect::<Vec<&str>>()"))
             }
         }
-        "join" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{}.join({})", generate_expr(arg), obj))
-            } else {
-                None
-            }
-        }
+        "join" => args
+            .first()
+            .map(|arg| format!("{}.join({})", generate_expr(arg), obj)),
         "replace" => {
             if args.len() == 2 {
                 Some(format!(
@@ -333,23 +287,15 @@ fn map_method_call(obj: &str, method: &str, args: &[Expr]) -> Option<String> {
                 None
             }
         }
-        "contains" | "__contains__" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{obj}.contains({})", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "contains" | "__contains__" => args
+            .first()
+            .map(|arg| format!("{obj}.contains({})", generate_expr(arg))),
         "keys" => Some(format!("{obj}.keys()")),
         "values" => Some(format!("{obj}.values()")),
         "items" => Some(format!("{obj}.iter()")),
-        "get" => {
-            if let Some(arg) = args.first() {
-                Some(format!("{obj}.get({})", generate_expr(arg)))
-            } else {
-                None
-            }
-        }
+        "get" => args
+            .first()
+            .map(|arg| format!("{obj}.get({})", generate_expr(arg))),
         _ => None,
     }
 }

@@ -1,5 +1,6 @@
 use colored::Colorize;
 
+#[allow(clippy::too_many_arguments)]
 pub fn format_error(
     code: &str,
     message: &str,
@@ -35,11 +36,7 @@ pub fn format_error(
     out.push_str(&format!("   {}\n", "|".blue().bold()));
 
     if !explanation.is_empty() {
-        out.push_str(&format!(
-            "  {} {}\n",
-            "=".blue().bold(),
-            explanation
-        ));
+        out.push_str(&format!("  {} {}\n", "=".blue().bold(), explanation));
     }
 
     if !rust_equivalent.is_empty() {
@@ -51,11 +48,7 @@ pub fn format_error(
     }
 
     if !fix.is_empty() {
-        out.push_str(&format!(
-            "\n  {} Fix: {}\n",
-            "=".blue().bold(),
-            fix
-        ));
+        out.push_str(&format!("\n  {} Fix: {}\n", "=".blue().bold(), fix));
     }
 
     out

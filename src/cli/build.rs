@@ -3,14 +3,12 @@ use std::path::Path;
 use std::process::Command;
 use walkdir::WalkDir;
 
-use crate::parser;
 use crate::codegen;
+use crate::parser;
 
 pub fn run() -> Result<(), String> {
     let config = find_config()?;
-    let project_dir = Path::new(&config)
-        .parent()
-        .ok_or("Invalid config path")?;
+    let project_dir = Path::new(&config).parent().ok_or("Invalid config path")?;
 
     let src_dir = project_dir.join("src");
     if !src_dir.exists() {
@@ -18,18 +16,16 @@ pub fn run() -> Result<(), String> {
     }
 
     let gen_dir = project_dir.join(".copperhead").join("gen").join("src");
-    fs::create_dir_all(&gen_dir)
-        .map_err(|e| format!("Failed to create output directory: {e}"))?;
+    fs::create_dir_all(&gen_dir).map_err(|e| format!("Failed to create output directory: {e}"))?;
 
     let mut sources = Vec::new();
     for entry in WalkDir::new(&src_dir).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
-        if path.extension().map(|e| e == "py").unwrap_or(false) {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.ends_with(".cu.py") {
-                    sources.push(path.to_path_buf());
-                }
-            }
+        if path.extension().map(|e| e == "py").unwrap_or(false)
+            && let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && name.ends_with(".cu.py")
+        {
+            sources.push(path.to_path_buf());
         }
     }
 
@@ -81,8 +77,8 @@ pub fn run() -> Result<(), String> {
 }
 
 fn find_config() -> Result<String, String> {
-    let mut dir = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+    let mut dir =
+        std::env::current_dir().map_err(|e| format!("Failed to get current directory: {e}"))?;
 
     loop {
         let config = dir.join("copperhead.toml");

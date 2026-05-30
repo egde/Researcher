@@ -1,9 +1,9 @@
 use rustpython_parser::ast as py;
 
-use crate::ast::types::Ownership;
-use crate::ast::*;
 use super::annotations::lower_type_annotation;
 use super::{lower_body, lower_expr};
+use crate::ast::types::Ownership;
+use crate::ast::*;
 
 pub fn is_base_model(class: &py::StmtClassDef) -> bool {
     class.bases.iter().any(|base| match base {
@@ -29,10 +29,10 @@ pub fn lower_base_model(class: &py::StmtClassDef) -> StructDef {
                     if let Some(v) = lower_validator(f) {
                         validators.push(v);
                     }
-                } else if f.name.as_str() != "__init__" {
-                    if let Some(m) = lower_method(f) {
-                        methods.push(m);
-                    }
+                } else if f.name.as_str() != "__init__"
+                    && let Some(m) = lower_method(f)
+                {
+                    methods.push(m);
                 }
             }
             _ => {}
@@ -125,10 +125,10 @@ fn extract_field_default(call: &py::ExprCall) -> Option<Expr> {
     }
 
     for kw in &call.keywords {
-        if let Some(arg) = &kw.arg {
-            if arg.as_str() == "default" {
-                return Some(lower_expr(&kw.value));
-            }
+        if let Some(arg) = &kw.arg
+            && arg.as_str() == "default"
+        {
+            return Some(lower_expr(&kw.value));
         }
     }
 
@@ -147,23 +147,20 @@ fn is_field_validator(f: &py::StmtFunctionDef) -> bool {
 }
 
 fn lower_validator(f: &py::StmtFunctionDef) -> Option<ValidatorDef> {
-    let field_name = f
-        .decorator_list
-        .iter()
-        .find_map(|d| {
-            if let py::Expr::Call(call) = d {
-                call.args.first().and_then(|a| {
-                    if let py::Expr::Constant(c) = a {
-                        if let py::Constant::Str(s) = &c.value {
-                            return Some(s.clone());
-                        }
-                    }
-                    None
-                })
-            } else {
+    let field_name = f.decorator_list.iter().find_map(|d| {
+        if let py::Expr::Call(call) = d {
+            call.args.first().and_then(|a| {
+                if let py::Expr::Constant(c) = a
+                    && let py::Constant::Str(s) = &c.value
+                {
+                    return Some(s.clone());
+                }
                 None
-            }
-        })?;
+            })
+        } else {
+            None
+        }
+    })?;
 
     let body = lower_body(&f.body);
 
@@ -183,7 +180,11 @@ fn lower_method(f: &py::StmtFunctionDef) -> Option<MethodDef> {
         if name == "self" || name == "cls" {
             continue;
         }
-        let annotation = arg.def.annotation.as_ref().map(|a| lower_type_annotation(a));
+        let annotation = arg
+            .def
+            .annotation
+            .as_ref()
+            .map(|a| lower_type_annotation(a));
         let default = arg.default.as_ref().map(|d| lower_expr(d));
         params.push(Param {
             name,
@@ -205,19 +206,17 @@ fn lower_method(f: &py::StmtFunctionDef) -> Option<MethodDef> {
 }
 
 fn extract_self_ownership(f: &py::StmtFunctionDef) -> Ownership {
-    if let Some(first) = f.args.args.first() {
-        if first.def.arg.as_str() == "self" {
-            if let Some(ann) = &first.def.annotation {
-                if let py::Expr::Name(n) = ann.as_ref() {
-                    return match n.id.as_str() {
-                        "mut" => Ownership::MutBorrowed,
-                        "borrow" => Ownership::Borrowed,
-                        "own" => Ownership::Owned,
-                        _ => Ownership::Borrowed,
-                    };
-                }
-            }
-        }
+    if let Some(first) = f.args.args.first()
+        && first.def.arg.as_str() == "self"
+        && let Some(ann) = &first.def.annotation
+        && let py::Expr::Name(n) = ann.as_ref()
+    {
+        return match n.id.as_str() {
+            "mut" => Ownership::MutBorrowed,
+            "borrow" => Ownership::Borrowed,
+            "own" => Ownership::Owned,
+            _ => Ownership::Borrowed,
+        };
     }
     Ownership::Borrowed
 }

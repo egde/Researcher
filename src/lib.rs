@@ -1,8 +1,8 @@
 pub mod ast;
-pub mod parser;
 pub mod checker;
-pub mod hir;
+pub mod cli;
 pub mod codegen;
 pub mod errors;
+pub mod hir;
 pub mod mapping;
-pub mod cli;
+pub mod parser;

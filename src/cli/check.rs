@@ -1,8 +1,8 @@
 use std::fs;
 use walkdir::WalkDir;
 
-use crate::parser;
 use crate::checker;
+use crate::parser;
 
 pub fn run() -> Result<(), String> {
     let src_dir = std::path::Path::new("src");

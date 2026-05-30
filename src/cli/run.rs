@@ -20,8 +20,8 @@ pub fn run() -> Result<(), String> {
 }
 
 fn find_gen_dir() -> Result<String, String> {
-    let mut dir = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+    let mut dir =
+        std::env::current_dir().map_err(|e| format!("Failed to get current directory: {e}"))?;
 
     loop {
         let output_dir = dir.join(".copperhead").join("gen");

@@ -1,6 +1,6 @@
-use crate::ast::*;
 use super::expr::generate_expr;
 use super::types::to_rust_type;
+use crate::ast::*;
 
 pub fn generate_statement(
     stmt: &Statement,
@@ -21,10 +21,7 @@ pub fn generate_statement(
                 .as_ref()
                 .map(|a| format!(": {}", to_rust_type(a)))
                 .unwrap_or_default();
-            format!(
-                "{pad}let {mut_kw}{name}{ty} = {};\n",
-                generate_expr(value)
-            )
+            format!("{pad}let {mut_kw}{name}{ty} = {};\n", generate_expr(value))
         }
         Statement::Assign { target, value } => {
             format!(
@@ -49,18 +46,14 @@ pub fn generate_statement(
 
             // In validator context, translate `if condition: raise ValueError(...)`
             // into Rust validation error returns
-            if let Some(field_name) = validator_field {
-                if let Some(translated) = try_translate_validator_if(
-                    condition, then_body, field_name, indent,
-                ) {
-                    return translated;
-                }
+            if let Some(field_name) = validator_field
+                && let Some(translated) =
+                    try_translate_validator_if(condition, then_body, field_name, indent)
+            {
+                return translated;
             }
 
-            out.push_str(&format!(
-                "{pad}if {} {{\n",
-                generate_expr(condition)
-            ));
+            out.push_str(&format!("{pad}if {} {{\n", generate_expr(condition)));
             for s in then_body {
                 out.push_str(&generate_statement(s, indent + 1, validator_field));
             }
@@ -87,10 +80,7 @@ pub fn generate_statement(
         }
         Statement::While { condition, body } => {
             let mut out = String::new();
-            out.push_str(&format!(
-                "{pad}while {} {{\n",
-                generate_expr(condition)
-            ));
+            out.push_str(&format!("{pad}while {} {{\n", generate_expr(condition)));
             for s in body {
                 out.push_str(&generate_statement(s, indent + 1, validator_field));
             }
@@ -139,18 +129,15 @@ fn try_translate_validator_if(
 }
 
 fn extract_raise_message(stmt: &Statement) -> Option<String> {
-    if let Statement::Expr(Expr::Call(func, args)) = stmt {
-        if let Expr::Name(name) = func.as_ref() {
-            if name == "ValueError" {
-                return Some(
-                    if let Some(Expr::StringLiteral(s)) = args.first() {
-                        s.clone()
-                    } else {
-                        "validation failed".to_string()
-                    },
-                );
-            }
-        }
+    if let Statement::Expr(Expr::Call(func, args)) = stmt
+        && let Expr::Name(name) = func.as_ref()
+        && name == "ValueError"
+    {
+        return Some(if let Some(Expr::StringLiteral(s)) = args.first() {
+            s.clone()
+        } else {
+            "validation failed".to_string()
+        });
     }
     None
 }

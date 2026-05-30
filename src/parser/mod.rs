@@ -1,14 +1,13 @@
 pub mod annotations;
 pub mod pydantic;
 
-use rustpython_parser::ast as py;
 use rustpython_parser::Parse;
+use rustpython_parser::ast as py;
 
 use crate::ast::*;
 
 pub fn parse_module(source: &str, filename: &str) -> Result<Module, String> {
-    let suite = py::Suite::parse(source, filename)
-        .map_err(|e| format!("Parse error: {e}"))?;
+    let suite = py::Suite::parse(source, filename).map_err(|e| format!("Parse error: {e}"))?;
 
     let mut items = Vec::new();
     for stmt in suite {
@@ -41,7 +40,10 @@ fn lower_stmt_to_item(stmt: &py::Stmt) -> Option<Item> {
 
 fn lower_function(f: &py::StmtFunctionDef, is_async: bool) -> Function {
     let params = lower_params(&f.args);
-    let return_type = f.returns.as_ref().map(|r| annotations::lower_type_annotation(r));
+    let return_type = f
+        .returns
+        .as_ref()
+        .map(|r| annotations::lower_type_annotation(r));
     let body = lower_body(&f.body);
 
     Function {
@@ -56,7 +58,10 @@ fn lower_function(f: &py::StmtFunctionDef, is_async: bool) -> Function {
 
 fn lower_async_function(f: &py::StmtAsyncFunctionDef) -> Function {
     let params = lower_params(&f.args);
-    let return_type = f.returns.as_ref().map(|r| annotations::lower_type_annotation(r));
+    let return_type = f
+        .returns
+        .as_ref()
+        .map(|r| annotations::lower_type_annotation(r));
     let body = lower_body(&f.body);
 
     Function {
@@ -76,7 +81,11 @@ fn lower_params(args: &py::Arguments) -> Vec<Param> {
         if name == "self" || name == "cls" {
             continue;
         }
-        let annotation = arg.def.annotation.as_ref().map(|a| annotations::lower_type_annotation(a));
+        let annotation = arg
+            .def
+            .annotation
+            .as_ref()
+            .map(|a| annotations::lower_type_annotation(a));
         let default = arg.default.as_ref().map(|d| lower_expr(d));
         params.push(Param {
             name,
@@ -93,11 +102,7 @@ fn lower_import_from(imp: &py::StmtImportFrom) -> Import {
         .as_ref()
         .map(|m| m.to_string())
         .unwrap_or_default();
-    let names = imp
-        .names
-        .iter()
-        .map(|a| a.name.to_string())
-        .collect();
+    let names = imp.names.iter().map(|a| a.name.to_string()).collect();
 
     Import {
         module,
@@ -107,7 +112,7 @@ fn lower_import_from(imp: &py::StmtImportFrom) -> Import {
 }
 
 pub fn lower_body(stmts: &[py::Stmt]) -> Vec<Statement> {
-    stmts.iter().filter_map(|s| lower_statement(s)).collect()
+    stmts.iter().filter_map(lower_statement).collect()
 }
 
 fn lower_statement(stmt: &py::Stmt) -> Option<Statement> {
@@ -184,13 +189,7 @@ fn lower_statement(stmt: &py::Stmt) -> Option<Statement> {
             let body = lower_body(&f.body);
             Some(Statement::For { target, iter, body })
         }
-        py::Stmt::Raise(r) => {
-            if let Some(exc) = &r.exc {
-                Some(Statement::Expr(lower_expr(exc)))
-            } else {
-                None
-            }
-        }
+        py::Stmt::Raise(r) => r.exc.as_ref().map(|exc| Statement::Expr(lower_expr(exc))),
         py::Stmt::Expr(e) => Some(Statement::Expr(lower_expr(&e.value))),
         py::Stmt::Pass(_) => Some(Statement::Pass),
         py::Stmt::Break(_) => Some(Statement::Break),
@@ -278,9 +277,7 @@ pub fn lower_expr(expr: &py::Expr) -> Expr {
             let args: Vec<Expr> = c.args.iter().map(lower_expr).collect();
 
             match &func {
-                Expr::Attribute(obj, method) => {
-                    Expr::MethodCall(obj.clone(), method.clone(), args)
-                }
+                Expr::Attribute(obj, method) => Expr::MethodCall(obj.clone(), method.clone(), args),
                 Expr::Name(name) if name == "try_" => {
                     if let Some(inner) = args.into_iter().next() {
                         Expr::Try(Box::new(inner))
@@ -313,9 +310,7 @@ pub fn lower_expr(expr: &py::Expr) -> Expr {
                 .keys
                 .iter()
                 .zip(d.values.iter())
-                .filter_map(|(k, v)| {
-                    k.as_ref().map(|key| (lower_expr(key), lower_expr(v)))
-                })
+                .filter_map(|(k, v)| k.as_ref().map(|key| (lower_expr(key), lower_expr(v))))
                 .collect();
             Expr::Dict(pairs)
         }
@@ -331,9 +326,7 @@ pub fn lower_expr(expr: &py::Expr) -> Expr {
                             FStringPart::Literal(String::new())
                         }
                     }
-                    py::Expr::FormattedValue(fv) => {
-                        FStringPart::Expr(lower_expr(&fv.value))
-                    }
+                    py::Expr::FormattedValue(fv) => FStringPart::Expr(lower_expr(&fv.value)),
                     other => FStringPart::Expr(lower_expr(other)),
                 })
                 .collect();

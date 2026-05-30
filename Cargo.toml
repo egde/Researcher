@@ -14,5 +14,9 @@ toml = "0.8"
 walkdir = "2"
 colored = "2"
 
+[profile.release]
+strip = true
+lto = true
+
 [dev-dependencies]
 insta = "1.39"

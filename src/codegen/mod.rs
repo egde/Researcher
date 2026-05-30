@@ -27,8 +27,8 @@ pub fn generate_module(module: &Module) -> String {
 fn generate_struct(s: &StructDef) -> String {
     let mut out = String::new();
 
-    let has_constraints = s.fields.iter().any(|f| f.constraints.is_some())
-        || !s.validators.is_empty();
+    let has_constraints =
+        s.fields.iter().any(|f| f.constraints.is_some()) || !s.validators.is_empty();
 
     out.push_str("#[derive(Debug, Clone)]\n");
     out.push_str(&format!("struct {} {{\n", s.name));
@@ -280,7 +280,7 @@ fn generate_method(method: &MethodDef, indent: usize) -> String {
             let ty = p
                 .annotation
                 .as_ref()
-                .map(|a| types::to_rust_type(a))
+                .map(types::to_rust_type)
                 .unwrap_or_else(|| "/* unknown */".to_string());
             format!("{}: {}", p.name, ty)
         })
@@ -322,7 +322,7 @@ pub fn generate_function(func: &Function, indent: usize) -> String {
             let ty = p
                 .annotation
                 .as_ref()
-                .map(|a| types::to_rust_type(a))
+                .map(types::to_rust_type)
                 .unwrap_or_else(|| "/* unknown */".to_string());
             format!("{}: {}", p.name, ty)
         })
