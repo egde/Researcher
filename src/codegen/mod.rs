@@ -21,6 +21,18 @@ pub fn generate_module(module: &Module) -> String {
         out.push('\n');
     }
 
+    let needs_validation = module.items.iter().any(|item| {
+        if let Item::Struct(s) = item {
+            s.fields.iter().any(|f| f.constraints.is_some()) || !s.validators.is_empty()
+        } else {
+            false
+        }
+    });
+    if needs_validation {
+        out.push_str(VALIDATION_ERROR_BOILERPLATE);
+        out.push('\n');
+    }
+
     for item in &module.items {
         match item {
             Item::Function(f) => {
@@ -37,6 +49,28 @@ pub fn generate_module(module: &Module) -> String {
 
     out
 }
+
+const VALIDATION_ERROR_BOILERPLATE: &str = r#"#[derive(Debug, Clone)]
+struct ValidationError {
+    field: String,
+    message: String,
+}
+
+impl ValidationError {
+    fn field(field: &str, message: &str) -> Self {
+        Self {
+            field: field.to_string(),
+            message: message.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.field, self.message)
+    }
+}
+"#;
 
 const KNOWN_MACROS: &[&str] = &["params"];
 
@@ -81,8 +115,10 @@ fn generate_struct(s: &StructDef, module: &Module) -> String {
 
     if has_serde(module) && s.is_base_model {
         out.push_str("#[derive(Debug, Clone, Serialize, Deserialize)]\n");
-    } else {
+    } else if s.is_base_model {
         out.push_str("#[derive(Debug, Clone)]\n");
+    } else {
+        out.push_str("#[derive(Debug)]\n");
     }
     out.push_str(&format!("struct {} {{\n", s.name));
 
@@ -93,8 +129,8 @@ fn generate_struct(s: &StructDef, module: &Module) -> String {
 
     out.push_str("}\n\n");
 
-    // Generate impl block
-    if has_constraints || !s.fields.is_empty() {
+    // Generate impl block (only for BaseModel structs)
+    if s.is_base_model && (has_constraints || !s.fields.is_empty()) {
         out.push_str(&format!("impl {} {{\n", s.name));
 
         if has_constraints {
@@ -416,9 +452,15 @@ pub fn generate_function(func: &Function, indent: usize, module: &Module) -> Str
         ret
     ));
 
+    let web_main = has_actix && is_main;
     let body = mark_mutable_bindings(&func.body);
     for s in &body {
         out.push_str(&stmt::generate_statement(s, indent + 1, None));
+    }
+
+    if web_main {
+        let inner_pad = "    ".repeat(indent + 1);
+        out.push_str(&format!("{inner_pad}Ok(())\n"));
     }
 
     out.push_str(&format!("{pad}}}\n"));

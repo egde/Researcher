@@ -219,8 +219,12 @@ pub fn generate_expr(expr: &Expr) -> String {
         }
 
         Expr::List(elts) => {
-            let items: Vec<String> = elts.iter().map(generate_expr).collect();
-            format!("vec![{}]", items.join(", "))
+            if elts.is_empty() {
+                "[]".to_string()
+            } else {
+                let items: Vec<String> = elts.iter().map(generate_expr).collect();
+                format!("vec![{}]", items.join(", "))
+            }
         }
         Expr::Dict(pairs) => {
             if pairs.is_empty() {

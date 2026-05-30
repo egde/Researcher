@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 from copperhead.actix_web import web, App, HttpServer, HttpResponse
 from copperhead.rusqlite import Connection, params
 from copperhead.serde import Serialize, Deserialize
@@ -9,7 +10,7 @@ class AppState:
     db: Mutex[Connection]
 
 
-class ErrorResponse:
+class ErrorResponse(BaseModel):
     error: str
 
 
@@ -21,8 +22,7 @@ def init_db(conn: borrow[Connection]):
 
 async def list_customers(data: web.Data[AppState]) -> HttpResponse:
     db = data.db.lock().unwrap()
-    stmt = db.prepare("SELECT id, name, email, phone FROM customers").unwrap()
-    customers: list[Customer] = stmt.query_map(
+    customers: list[Customer] = db.prepare("SELECT id, name, email, phone FROM customers").unwrap().query_map(
         [], lambda row: Ok(Customer(
             id=try_(row.get(0)),
             name=try_(row.get(1)),
@@ -30,7 +30,7 @@ async def list_customers(data: web.Data[AppState]) -> HttpResponse:
             phone=try_(row.get(3))
         ))
     ).unwrap().filter_map(lambda r: r.ok()).collect()
-    total = customers.len()
+    total = int(customers.len())
     return HttpResponse.Ok().json(CustomerList(customers=customers, total=total))
 
 

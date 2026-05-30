@@ -4,6 +4,27 @@ expression: "transpile_file(\"examples/customer_api/src/models.cu.py\")"
 ---
 use serde::{Serialize, Deserialize};
 
+#[derive(Debug, Clone)]
+struct ValidationError {
+    field: String,
+    message: String,
+}
+
+impl ValidationError {
+    fn field(field: &str, message: &str) -> Self {
+        Self {
+            field: field.to_string(),
+            message: message.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.field, self.message)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CustomerCreate {
     name: String,

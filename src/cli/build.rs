@@ -35,26 +35,73 @@ pub fn run() -> Result<(), String> {
 
     println!("Transpiling {} file(s)...", sources.len());
 
+    // Parse all source files and merge into a single module
+    let mut merged = crate::ast::Module {
+        name: "main".to_string(),
+        items: Vec::new(),
+        import_aliases: Vec::new(),
+    };
+
+    // Sort: non-main files first, main.cu.py last
+    sources.sort_by(|a, b| {
+        let a_is_main = a
+            .file_name()
+            .map(|n| n.to_str().unwrap_or("").starts_with("main"))
+            .unwrap_or(false);
+        let b_is_main = b
+            .file_name()
+            .map(|n| n.to_str().unwrap_or("").starts_with("main"))
+            .unwrap_or(false);
+        a_is_main.cmp(&b_is_main)
+    });
+
     for source_path in &sources {
         let source = fs::read_to_string(source_path)
             .map_err(|e| format!("Failed to read {}: {e}", source_path.display()))?;
 
-        let filename = source_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
-        // Strip .cu from filename (e.g., "main.cu" -> "main")
-        let rust_name = filename.strip_suffix(".cu").unwrap_or(filename);
-
         let module = parser::parse_module(&source, &source_path.to_string_lossy())?;
-        let rust_code = codegen::generate_module(&module);
 
-        let out_path = gen_dir.join(format!("{rust_name}.rs"));
-        fs::write(&out_path, &rust_code)
-            .map_err(|e| format!("Failed to write {}: {e}", out_path.display()))?;
+        // Merge imports (deduplicate by name)
+        for alias in &module.import_aliases {
+            if !merged.import_aliases.iter().any(|a| a.name == alias.name) {
+                merged.import_aliases.push(alias.clone());
+            }
+        }
 
-        println!("  {} → {}", source_path.display(), out_path.display());
+        // Merge items, deduplicating imports by module path
+        for item in module.items {
+            if let crate::ast::Item::Import(ref imp) = item {
+                let already_exists = merged.items.iter().any(|existing| {
+                    if let crate::ast::Item::Import(e) = existing {
+                        e.module == imp.module
+                    } else {
+                        false
+                    }
+                });
+                if already_exists {
+                    continue;
+                }
+            }
+            merged.items.push(item);
+        }
+
+        println!("  {}", source_path.display());
     }
+
+    // Reorder: imports → structs → functions (main last)
+    merged.items.sort_by_key(|item| match item {
+        crate::ast::Item::Import(_) => 0,
+        crate::ast::Item::Struct(_) => 1,
+        crate::ast::Item::Function(f) if f.name == "main" => 3,
+        crate::ast::Item::Function(_) => 2,
+    });
+
+    let rust_code = codegen::generate_module(&merged);
+    let out_path = gen_dir.join("main.rs");
+    fs::write(&out_path, &rust_code)
+        .map_err(|e| format!("Failed to write {}: {e}", out_path.display()))?;
+
+    println!("  → {}", out_path.display());
 
     // Generate Cargo.toml in .copperhead/gen/
     let cargo_toml = generate_cargo_toml(project_dir)?;
