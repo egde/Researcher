@@ -1,0 +1,20 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 176
+expression: transpile(source)
+---
+#[derive(Debug, Clone)]
+struct Email {
+    address: String,
+}
+
+impl Email {
+    fn new(address: String) -> Result<Self, ValidationError> {
+        if !address.contains(&"@".to_string()) {
+            return Err(ValidationError::field("address", "must contain @"));
+        }
+        Ok(Self {
+            address,
+        })
+    }
+}

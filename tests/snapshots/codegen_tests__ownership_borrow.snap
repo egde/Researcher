@@ -1,0 +1,8 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 35
+expression: transpile(source)
+---
+fn inspect(s: &String) -> i64 {
+    return s.len();
+}

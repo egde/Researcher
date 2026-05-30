@@ -1,0 +1,25 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 70
+expression: transpile(source)
+---
+#[derive(Debug, Clone)]
+struct User {
+    name: String,
+    age: i64,
+}
+
+impl User {
+    fn new(name: String, age: i64) -> Result<Self, ValidationError> {
+        if age < 0 {
+            return Err(ValidationError::field("age", "must be >= 0"));
+        }
+        if age > 150 {
+            return Err(ValidationError::field("age", "must be <= 150"));
+        }
+        Ok(Self {
+            name,
+            age,
+        })
+    }
+}

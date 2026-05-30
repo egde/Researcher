@@ -1,0 +1,10 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 102
+expression: transpile(source)
+---
+fn count() {
+    for i in 0..10 {
+        println!("{}", i);
+    }
+}

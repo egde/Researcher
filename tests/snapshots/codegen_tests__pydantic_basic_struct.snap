@@ -1,0 +1,19 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 58
+expression: transpile(source)
+---
+#[derive(Debug, Clone)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Point {
+    fn new(x: f64, y: f64) -> Self {
+        Self {
+            x,
+            y,
+        }
+    }
+}

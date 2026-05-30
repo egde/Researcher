@@ -1,0 +1,8 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 92
+expression: transpile(source)
+---
+fn greet(name: String) -> String {
+    return format!("Hello, {}!", name);
+}
