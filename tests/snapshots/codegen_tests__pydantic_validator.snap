@@ -1,6 +1,5 @@
 ---
 source: tests/codegen_tests.rs
-assertion_line: 176
 expression: transpile(source)
 ---
 #[derive(Debug, Clone)]
@@ -10,7 +9,7 @@ struct Email {
 
 impl Email {
     fn new(address: String) -> Result<Self, ValidationError> {
-        if !address.contains(&"@".to_string()) {
+        if !address.contains(&"@") {
             return Err(ValidationError::field("address", "must contain @"));
         }
         Ok(Self {

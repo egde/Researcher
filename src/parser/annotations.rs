@@ -52,6 +52,13 @@ fn lower_copperhead_type(expr: &py::Expr) -> CopperheadType {
             other => CopperheadType::Named(other.to_string()),
         },
         py::Expr::Subscript(s) => lower_subscript_type(&s.value, &s.slice),
+        py::Expr::Attribute(_) => {
+            if let Some(dotted) = extract_dotted_type_name(expr) {
+                CopperheadType::Named(dotted)
+            } else {
+                CopperheadType::Unknown
+            }
+        }
         py::Expr::Constant(c) => {
             if let py::Constant::None = &c.value {
                 CopperheadType::None
@@ -63,9 +70,29 @@ fn lower_copperhead_type(expr: &py::Expr) -> CopperheadType {
     }
 }
 
+fn extract_dotted_type_name(expr: &py::Expr) -> Option<String> {
+    match expr {
+        py::Expr::Name(n) => Some(n.id.to_string()),
+        py::Expr::Attribute(a) => {
+            let prefix = extract_dotted_type_name(&a.value)?;
+            Some(format!("{}::{}", prefix, a.attr))
+        }
+        _ => None,
+    }
+}
+
 fn lower_subscript_type(value: &py::Expr, slice: &py::Expr) -> CopperheadType {
+    let type_name_owned;
     let type_name = match value {
         py::Expr::Name(n) => n.id.as_str(),
+        py::Expr::Attribute(_) => {
+            if let Some(dotted) = extract_dotted_type_name(value) {
+                type_name_owned = dotted;
+                type_name_owned.as_str()
+            } else {
+                return CopperheadType::Unknown;
+            }
+        }
         _ => return CopperheadType::Unknown,
     };
 

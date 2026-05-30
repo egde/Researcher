@@ -1,0 +1,10 @@
+---
+source: tests/codegen_tests.rs
+expression: transpile(source)
+---
+use rusqlite::Connection;
+
+fn open_db() -> Connection {
+    let conn = Connection::open(":memory:");
+    return conn;
+}

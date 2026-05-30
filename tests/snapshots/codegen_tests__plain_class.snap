@@ -1,0 +1,18 @@
+---
+source: tests/codegen_tests.rs
+expression: transpile(source)
+---
+#[derive(Debug, Clone)]
+struct AppState {
+    db: String,
+    count: i64,
+}
+
+impl AppState {
+    fn new(db: String, count: i64) -> Self {
+        Self {
+            db,
+            count,
+        }
+    }
+}

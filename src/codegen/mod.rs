@@ -5,16 +5,30 @@ pub mod types;
 use crate::ast::*;
 
 pub fn generate_module(module: &Module) -> String {
+    expr::set_codegen_context(module);
     let mut out = String::new();
+
+    let mut has_imports = false;
+    for item in &module.items {
+        if let Item::Import(imp) = item
+            && let Some(use_stmt) = generate_use_statement(imp)
+        {
+            out.push_str(&use_stmt);
+            has_imports = true;
+        }
+    }
+    if has_imports {
+        out.push('\n');
+    }
 
     for item in &module.items {
         match item {
             Item::Function(f) => {
-                out.push_str(&generate_function(f, 0));
+                out.push_str(&generate_function(f, 0, module));
                 out.push('\n');
             }
             Item::Struct(s) => {
-                out.push_str(&generate_struct(s));
+                out.push_str(&generate_struct(s, module));
                 out.push('\n');
             }
             Item::Import(_) => {}
@@ -24,13 +38,52 @@ pub fn generate_module(module: &Module) -> String {
     out
 }
 
-fn generate_struct(s: &StructDef) -> String {
+const KNOWN_MACROS: &[&str] = &["params"];
+
+fn generate_use_statement(imp: &Import) -> Option<String> {
+    if !imp.module.starts_with("copperhead.") {
+        return None;
+    }
+    let crate_path = imp.module.strip_prefix("copperhead.")?;
+    let rust_path = crate_path.replace('.', "::");
+    let names: Vec<&String> = imp
+        .names
+        .iter()
+        .filter(|n| !KNOWN_MACROS.contains(&n.as_str()))
+        .collect();
+    if names.is_empty() {
+        return None;
+    }
+    if names.len() == 1 {
+        Some(format!("use {}::{};\n", rust_path, names[0]))
+    } else {
+        let name_strs: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+        Some(format!(
+            "use {}::{{{}}};\n",
+            rust_path,
+            name_strs.join(", ")
+        ))
+    }
+}
+
+fn has_serde(module: &Module) -> bool {
+    module
+        .import_aliases
+        .iter()
+        .any(|a| a.crate_path == "serde")
+}
+
+fn generate_struct(s: &StructDef, module: &Module) -> String {
     let mut out = String::new();
 
     let has_constraints =
         s.fields.iter().any(|f| f.constraints.is_some()) || !s.validators.is_empty();
 
-    out.push_str("#[derive(Debug, Clone)]\n");
+    if has_serde(module) && s.is_base_model {
+        out.push_str("#[derive(Debug, Clone, Serialize, Deserialize)]\n");
+    } else {
+        out.push_str("#[derive(Debug, Clone)]\n");
+    }
     out.push_str(&format!("struct {} {{\n", s.name));
 
     for field in &s.fields {
@@ -76,7 +129,7 @@ fn generate_simple_constructor(s: &StructDef) -> String {
             out.push_str(&format!(
                 "            {}: {},\n",
                 field.name,
-                expr::generate_expr(default)
+                expr::generate_expr_owned(default)
             ));
         } else {
             out.push_str(&format!("            {},\n", field.name));
@@ -118,7 +171,7 @@ fn generate_validated_constructor(s: &StructDef) -> String {
             out.push_str(&format!(
                 "            {}: {},\n",
                 field.name,
-                expr::generate_expr(default)
+                expr::generate_expr_owned(default)
             ));
         } else {
             out.push_str(&format!("            {},\n", field.name));
@@ -255,6 +308,13 @@ fn rewrite_expr_validator_param(expr: &Expr, field_name: &str) -> Expr {
                 .map(|a| rewrite_expr_validator_param(a, field_name))
                 .collect(),
         ),
+        Expr::StructInit { name, fields } => Expr::StructInit {
+            name: name.clone(),
+            fields: fields
+                .iter()
+                .map(|(k, v)| (k.clone(), rewrite_expr_validator_param(v, field_name)))
+                .collect(),
+        },
         other => other.clone(),
     }
 }
@@ -311,9 +371,19 @@ fn generate_method(method: &MethodDef, indent: usize) -> String {
     out
 }
 
-pub fn generate_function(func: &Function, indent: usize) -> String {
+pub fn generate_function(func: &Function, indent: usize, module: &Module) -> String {
     let pad = "    ".repeat(indent);
     let mut out = String::new();
+
+    let has_actix = module
+        .import_aliases
+        .iter()
+        .any(|a| a.crate_path == "actix_web");
+    let is_main = func.name == "main";
+
+    if has_actix && is_main && func.is_async {
+        out.push_str(&format!("{pad}#[actix_web::main]\n"));
+    }
 
     let params: Vec<String> = func
         .params
@@ -328,11 +398,14 @@ pub fn generate_function(func: &Function, indent: usize) -> String {
         })
         .collect();
 
-    let ret = func
-        .return_type
-        .as_ref()
-        .map(|r| format!(" -> {}", types::to_rust_type(r)))
-        .unwrap_or_default();
+    let ret = if has_actix && is_main && func.return_type.is_none() {
+        " -> std::io::Result<()>".to_string()
+    } else {
+        func.return_type
+            .as_ref()
+            .map(|r| format!(" -> {}", types::to_rust_type(r)))
+            .unwrap_or_default()
+    };
 
     let async_kw = if func.is_async { "async " } else { "" };
 
@@ -343,10 +416,69 @@ pub fn generate_function(func: &Function, indent: usize) -> String {
         ret
     ));
 
-    for s in &func.body {
+    let body = mark_mutable_bindings(&func.body);
+    for s in &body {
         out.push_str(&stmt::generate_statement(s, indent + 1, None));
     }
 
     out.push_str(&format!("{pad}}}\n"));
     out
+}
+
+fn collect_mutated_vars(stmts: &[Statement], mutated: &mut std::collections::HashSet<String>) {
+    for stmt in stmts {
+        match stmt {
+            Statement::Assign {
+                target: Expr::Attribute(obj, _),
+                ..
+            } => {
+                if let Expr::Name(var) = obj.as_ref() {
+                    mutated.insert(var.clone());
+                }
+            }
+            Statement::If {
+                then_body,
+                elif_clauses,
+                else_body,
+                ..
+            } => {
+                collect_mutated_vars(then_body, mutated);
+                for (_, body) in elif_clauses {
+                    collect_mutated_vars(body, mutated);
+                }
+                if let Some(body) = else_body {
+                    collect_mutated_vars(body, mutated);
+                }
+            }
+            Statement::While { body, .. } | Statement::For { body, .. } => {
+                collect_mutated_vars(body, mutated);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn mark_mutable_bindings(stmts: &[Statement]) -> Vec<Statement> {
+    let mut mutated = std::collections::HashSet::new();
+    collect_mutated_vars(stmts, &mut mutated);
+    if mutated.is_empty() {
+        return stmts.to_vec();
+    }
+    stmts
+        .iter()
+        .map(|s| match s {
+            Statement::Let {
+                name,
+                annotation,
+                value,
+                mutable,
+            } => Statement::Let {
+                name: name.clone(),
+                annotation: annotation.clone(),
+                value: value.clone(),
+                mutable: *mutable || mutated.contains(name),
+            },
+            other => other.clone(),
+        })
+        .collect()
 }

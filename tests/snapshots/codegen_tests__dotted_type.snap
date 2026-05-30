@@ -1,0 +1,9 @@
+---
+source: tests/codegen_tests.rs
+expression: transpile(source)
+---
+use actix_web::web;
+
+async fn handler(data: web::Data<String>) -> String {
+    return data.into_inner();
+}

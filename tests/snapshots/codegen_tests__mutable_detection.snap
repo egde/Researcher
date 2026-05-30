@@ -1,0 +1,9 @@
+---
+source: tests/codegen_tests.rs
+expression: transpile(source)
+---
+fn update() {
+    let mut item = get_item();
+    item.name = "new".to_string();
+    return item;
+}

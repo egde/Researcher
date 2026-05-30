@@ -16,9 +16,32 @@ pub fn parse_module(source: &str, filename: &str) -> Result<Module, String> {
         }
     }
 
+    let import_aliases = items
+        .iter()
+        .filter_map(|item| {
+            if let Item::Import(imp) = item
+                && imp.module.starts_with("copperhead.")
+            {
+                let crate_path = imp.module.strip_prefix("copperhead.").unwrap().to_string();
+                return Some(
+                    imp.names
+                        .iter()
+                        .map(|n| ImportAlias {
+                            name: n.clone(),
+                            crate_path: crate_path.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                );
+            }
+            None
+        })
+        .flatten()
+        .collect();
+
     Ok(Module {
         name: filename.to_string(),
         items,
+        import_aliases,
     })
 }
 
@@ -30,7 +53,7 @@ fn lower_stmt_to_item(stmt: &py::Stmt) -> Option<Item> {
             if pydantic::is_base_model(c) {
                 Some(Item::Struct(pydantic::lower_base_model(c)))
             } else {
-                None
+                Some(Item::Struct(lower_plain_class(c)))
             }
         }
         py::Stmt::ImportFrom(imp) => Some(Item::Import(lower_import_from(imp))),
@@ -45,6 +68,7 @@ fn lower_function(f: &py::StmtFunctionDef, is_async: bool) -> Function {
         .as_ref()
         .map(|r| annotations::lower_type_annotation(r));
     let body = lower_body(&f.body);
+    let decorators = lower_decorators(&f.decorator_list);
 
     Function {
         name: f.name.to_string(),
@@ -52,6 +76,7 @@ fn lower_function(f: &py::StmtFunctionDef, is_async: bool) -> Function {
         return_type,
         body,
         is_async,
+        decorators,
         span: SourceSpan { start: 0, end: 0 },
     }
 }
@@ -63,6 +88,7 @@ fn lower_async_function(f: &py::StmtAsyncFunctionDef) -> Function {
         .as_ref()
         .map(|r| annotations::lower_type_annotation(r));
     let body = lower_body(&f.body);
+    let decorators = lower_decorators(&f.decorator_list);
 
     Function {
         name: f.name.to_string(),
@@ -70,6 +96,7 @@ fn lower_async_function(f: &py::StmtAsyncFunctionDef) -> Function {
         return_type,
         body,
         is_async: true,
+        decorators,
         span: SourceSpan { start: 0, end: 0 },
     }
 }
@@ -108,6 +135,71 @@ fn lower_import_from(imp: &py::StmtImportFrom) -> Import {
         module,
         names,
         span: SourceSpan { start: 0, end: 0 },
+    }
+}
+
+fn lower_plain_class(c: &py::StmtClassDef) -> StructDef {
+    let mut fields = Vec::new();
+    for stmt in &c.body {
+        if let py::Stmt::AnnAssign(a) = stmt
+            && let py::Expr::Name(n) = a.target.as_ref()
+        {
+            let ty = annotations::lower_type_annotation(&a.annotation);
+            let default = a.value.as_ref().map(|v| lower_expr(v));
+            fields.push(FieldDef {
+                name: n.id.to_string(),
+                ty,
+                default,
+                constraints: None,
+            });
+        }
+    }
+    StructDef {
+        name: c.name.to_string(),
+        fields,
+        validators: vec![],
+        methods: vec![],
+        is_base_model: false,
+        span: SourceSpan { start: 0, end: 0 },
+    }
+}
+
+fn lower_decorators(decorator_list: &[py::Expr]) -> Vec<Decorator> {
+    decorator_list
+        .iter()
+        .filter_map(|d| match d {
+            py::Expr::Call(call) => {
+                let name = extract_dotted_name(&call.func)?;
+                if name == "field_validator" || name == "classmethod" {
+                    return None;
+                }
+                let args = call.args.iter().map(lower_expr).collect();
+                Some(Decorator { name, args })
+            }
+            py::Expr::Name(n) => {
+                let name = n.id.to_string();
+                if name == "classmethod" || name == "staticmethod" {
+                    return None;
+                }
+                Some(Decorator { name, args: vec![] })
+            }
+            py::Expr::Attribute(_) => {
+                let name = extract_dotted_name(d)?;
+                Some(Decorator { name, args: vec![] })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn extract_dotted_name(expr: &py::Expr) -> Option<String> {
+    match expr {
+        py::Expr::Name(n) => Some(n.id.to_string()),
+        py::Expr::Attribute(a) => {
+            let prefix = extract_dotted_name(&a.value)?;
+            Some(format!("{}.{}", prefix, a.attr))
+        }
+        _ => None,
     }
 }
 
@@ -275,6 +367,26 @@ pub fn lower_expr(expr: &py::Expr) -> Expr {
         py::Expr::Call(c) => {
             let func = lower_expr(&c.func);
             let args: Vec<Expr> = c.args.iter().map(lower_expr).collect();
+
+            // Check for struct init: UpperCaseName(key=value, ...)
+            if !c.keywords.is_empty()
+                && let Expr::Name(ref name) = func
+                && name.chars().next().is_some_and(|ch| ch.is_uppercase())
+            {
+                let fields: Vec<(String, Expr)> = c
+                    .keywords
+                    .iter()
+                    .filter_map(|kw| {
+                        kw.arg
+                            .as_ref()
+                            .map(|arg| (arg.to_string(), lower_expr(&kw.value)))
+                    })
+                    .collect();
+                return Expr::StructInit {
+                    name: name.clone(),
+                    fields,
+                };
+            }
 
             match &func {
                 Expr::Attribute(obj, method) => Expr::MethodCall(obj.clone(), method.clone(), args),

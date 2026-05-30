@@ -1,0 +1,82 @@
+---
+source: tests/codegen_tests.rs
+expression: "transpile_file(\"examples/customer_api/src/models.cu.py\")"
+---
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CustomerCreate {
+    name: String,
+    email: String,
+    phone: Option<String>,
+}
+
+impl CustomerCreate {
+    fn new(name: String, email: String) -> Result<Self, ValidationError> {
+        if name.len() < 1 {
+            return Err(ValidationError::field("name", "length must be >= 1"));
+        }
+        if name.len() > 100 {
+            return Err(ValidationError::field("name", "length must be <= 100"));
+        }
+        if !email.contains(&"@") {
+            return Err(ValidationError::field("email", "invalid email address"));
+        }
+        Ok(Self {
+            name,
+            email,
+            phone: None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Customer {
+    id: String,
+    name: String,
+    email: String,
+    phone: Option<String>,
+}
+
+impl Customer {
+    fn new(id: String, name: String, email: String) -> Self {
+        Self {
+            id,
+            name,
+            email,
+            phone: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CustomerUpdate {
+    name: Option<String>,
+    email: Option<String>,
+    phone: Option<String>,
+}
+
+impl CustomerUpdate {
+    fn new() -> Self {
+        Self {
+            name: None,
+            email: None,
+            phone: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CustomerList {
+    customers: Vec<Customer>,
+    total: i64,
+}
+
+impl CustomerList {
+    fn new(customers: Vec<Customer>, total: i64) -> Self {
+        Self {
+            customers,
+            total,
+        }
+    }
+}

@@ -2,6 +2,7 @@
 source: tests/codegen_tests.rs
 expression: transpile(source)
 ---
-fn main() {
-    println!("{}", "Hello, world!");
+fn make_point() {
+    let p = Point { x: 1, y: 2 };
+    return p;
 }

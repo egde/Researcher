@@ -6,6 +6,11 @@ fn transpile(source: &str) -> String {
     codegen::generate_module(&module)
 }
 
+fn transpile_file(path: &str) -> String {
+    let source = std::fs::read_to_string(path).unwrap();
+    transpile(&source)
+}
+
 #[test]
 fn test_hello_world() {
     let source = r#"
@@ -196,4 +201,106 @@ async def fetch(url: str) -> str:
     return response
 "#;
     insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_static_method_call() {
+    let source = r#"
+from copperhead.rusqlite import Connection
+
+def open_db() -> Connection:
+    conn = Connection.open(":memory:")
+    return conn
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_struct_init_kwargs() {
+    let source = r#"
+def make_point():
+    p = Point(x=1, y=2)
+    return p
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_import_to_use() {
+    let source = r#"
+from copperhead.actix_web import web, App, HttpServer, HttpResponse
+from copperhead.serde import Serialize, Deserialize
+
+class Item(BaseModel):
+    name: str
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_plain_class() {
+    let source = r#"
+class AppState:
+    db: str
+    count: int
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_dotted_type() {
+    let source = r#"
+from copperhead.actix_web import web
+
+async def handler(data: web.Data[str]) -> str:
+    return data.into_inner()
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_serde_derives() {
+    let source = r#"
+from pydantic import BaseModel
+from copperhead.serde import Serialize, Deserialize
+
+class Point(BaseModel):
+    x: float
+    y: float
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_call_site_borrow() {
+    let source = r#"
+def process(data: borrow[str]):
+    print(data)
+
+def main():
+    s = "hello"
+    process(s)
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_mutable_detection() {
+    let source = r#"
+def update():
+    item = get_item()
+    item.name = "new"
+    return item
+"#;
+    insta::assert_snapshot!(transpile(source));
+}
+
+#[test]
+fn test_customer_api_models() {
+    insta::assert_snapshot!(transpile_file("examples/customer_api/src/models.cu.py"));
+}
+
+#[test]
+fn test_customer_api_main() {
+    insta::assert_snapshot!(transpile_file("examples/customer_api/src/main.cu.py"));
 }

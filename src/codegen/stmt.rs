@@ -1,4 +1,4 @@
-use super::expr::generate_expr;
+use super::expr::{generate_expr, generate_expr_owned};
 use super::types::to_rust_type;
 use crate::ast::*;
 
@@ -21,17 +21,20 @@ pub fn generate_statement(
                 .as_ref()
                 .map(|a| format!(": {}", to_rust_type(a)))
                 .unwrap_or_default();
-            format!("{pad}let {mut_kw}{name}{ty} = {};\n", generate_expr(value))
+            format!(
+                "{pad}let {mut_kw}{name}{ty} = {};\n",
+                generate_expr_owned(value)
+            )
         }
         Statement::Assign { target, value } => {
             format!(
                 "{pad}{} = {};\n",
                 generate_expr(target),
-                generate_expr(value)
+                generate_expr_owned(value)
             )
         }
         Statement::Return(Some(expr)) => {
-            format!("{pad}return {};\n", generate_expr(expr))
+            format!("{pad}return {};\n", generate_expr_owned(expr))
         }
         Statement::Return(None) => {
             format!("{pad}return;\n")

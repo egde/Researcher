@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+from copperhead.serde import Serialize, Deserialize
 
 
 class CustomerCreate(BaseModel):

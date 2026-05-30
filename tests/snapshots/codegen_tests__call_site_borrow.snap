@@ -1,0 +1,12 @@
+---
+source: tests/codegen_tests.rs
+expression: transpile(source)
+---
+fn process(data: &String) {
+    println!("{}", data);
+}
+
+fn main() {
+    let s = "hello".to_string();
+    process(&s);
+}

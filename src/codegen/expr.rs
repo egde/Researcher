@@ -1,4 +1,90 @@
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+
+use crate::ast::types::Ownership;
 use crate::ast::*;
+
+struct CodegenContext {
+    import_aliases: HashMap<String, String>,
+    known_macros: HashSet<String>,
+    fn_signatures: HashMap<String, Vec<Ownership>>,
+}
+
+thread_local! {
+    static CODEGEN_CTX: RefCell<CodegenContext> = RefCell::new(CodegenContext {
+        import_aliases: HashMap::new(),
+        known_macros: HashSet::new(),
+        fn_signatures: HashMap::new(),
+    });
+}
+
+pub fn set_codegen_context(module: &Module) {
+    CODEGEN_CTX.with(|ctx| {
+        let mut ctx = ctx.borrow_mut();
+        ctx.import_aliases.clear();
+        ctx.known_macros.clear();
+        ctx.fn_signatures.clear();
+        for alias in &module.import_aliases {
+            ctx.import_aliases
+                .insert(alias.name.clone(), alias.crate_path.clone());
+        }
+        ctx.known_macros.insert("params".to_string());
+        for item in &module.items {
+            if let Item::Function(f) = item {
+                let ownerships: Vec<Ownership> = f
+                    .params
+                    .iter()
+                    .map(|p| {
+                        p.annotation
+                            .as_ref()
+                            .map(|a| a.ownership.clone())
+                            .unwrap_or(Ownership::Owned)
+                    })
+                    .collect();
+                ctx.fn_signatures.insert(f.name.clone(), ownerships);
+            }
+        }
+    });
+}
+
+fn get_param_ownership(fn_name: &str, idx: usize) -> Option<Ownership> {
+    CODEGEN_CTX.with(|ctx| {
+        ctx.borrow()
+            .fn_signatures
+            .get(fn_name)
+            .and_then(|sigs| sigs.get(idx).cloned())
+    })
+}
+
+fn is_import_alias(name: &str) -> bool {
+    CODEGEN_CTX.with(|ctx| ctx.borrow().import_aliases.contains_key(name))
+}
+
+fn get_macro_crate(name: &str) -> Option<String> {
+    CODEGEN_CTX.with(|ctx| {
+        let ctx = ctx.borrow();
+        if ctx.known_macros.contains(name) {
+            ctx.import_aliases.get(name).cloned()
+        } else {
+            None
+        }
+    })
+}
+
+fn is_module_path(expr: &Expr) -> bool {
+    match expr {
+        Expr::Name(n) => n.chars().next().is_some_and(|c| c.is_uppercase()) || is_import_alias(n),
+        Expr::Attribute(obj, _) => is_module_path(obj),
+        _ => false,
+    }
+}
+
+pub fn generate_expr_owned(expr: &Expr) -> String {
+    match expr {
+        Expr::StringLiteral(s) => format!("\"{}\".to_string()", escape_string(s)),
+        _ => generate_expr(expr),
+    }
+}
 
 pub fn generate_expr(expr: &Expr) -> String {
     match expr {
@@ -7,14 +93,15 @@ pub fn generate_expr(expr: &Expr) -> String {
             let s = f.to_string();
             if s.contains('.') { s } else { format!("{s}.0") }
         }
-        Expr::StringLiteral(s) => format!("\"{}\".to_string()", escape_string(s)),
+        Expr::StringLiteral(s) => format!("\"{}\"", escape_string(s)),
         Expr::FStringLiteral(parts) => generate_fstring(parts),
         Expr::BoolLiteral(b) => b.to_string(),
         Expr::NoneLiteral => "None".to_string(),
 
         Expr::Name(name) => map_builtin_name(name),
         Expr::Attribute(obj, attr) => {
-            format!("{}.{}", generate_expr(obj), attr)
+            let sep = if is_module_path(obj) { "::" } else { "." };
+            format!("{}{sep}{}", generate_expr(obj), attr)
         }
         Expr::Index(obj, idx) => {
             format!("{}[{}]", generate_expr(obj), generate_expr(idx))
@@ -80,7 +167,33 @@ pub fn generate_expr(expr: &Expr) -> String {
             if let Some(m) = mapped {
                 return m;
             }
-            let arg_strs: Vec<String> = args.iter().map(generate_expr).collect();
+            if let Expr::Name(name) = func.as_ref()
+                && let Some(crate_path) = get_macro_crate(name)
+            {
+                let arg_strs: Vec<String> = args.iter().map(generate_expr).collect();
+                return format!("{}::{}![{}]", crate_path, name, arg_strs.join(", "));
+            }
+            let fn_name = if let Expr::Name(name) = func.as_ref() {
+                Some(name.as_str())
+            } else {
+                None
+            };
+            let arg_strs: Vec<String> = args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    let expr_str = generate_expr(arg);
+                    if let Some(name) = fn_name {
+                        match get_param_ownership(name, i) {
+                            Some(Ownership::Borrowed) => format!("&{expr_str}"),
+                            Some(Ownership::MutBorrowed) => format!("&mut {expr_str}"),
+                            _ => expr_str,
+                        }
+                    } else {
+                        expr_str
+                    }
+                })
+                .collect();
             format!("{}({})", f, arg_strs.join(", "))
         }
         Expr::MethodCall(obj, method, args) => {
@@ -89,8 +202,20 @@ pub fn generate_expr(expr: &Expr) -> String {
             if let Some(m) = mapped {
                 return m;
             }
-            let arg_strs: Vec<String> = args.iter().map(generate_expr).collect();
-            format!("{o}.{method}({})", arg_strs.join(", "))
+            let is_static = is_module_path(obj);
+            let sep = if is_static { "::" } else { "." };
+            let add_move = is_static && method == "new";
+            let arg_strs: Vec<String> = args
+                .iter()
+                .map(|arg| {
+                    if add_move && let Expr::Lambda(_, _) = arg {
+                        let s = generate_expr(arg);
+                        return format!("move {s}");
+                    }
+                    generate_expr(arg)
+                })
+                .collect();
+            format!("{o}{sep}{method}({})", arg_strs.join(", "))
         }
 
         Expr::List(elts) => {
@@ -111,6 +236,21 @@ pub fn generate_expr(expr: &Expr) -> String {
         Expr::Tuple(elts) => {
             let items: Vec<String> = elts.iter().map(generate_expr).collect();
             format!("({})", items.join(", "))
+        }
+
+        Expr::StructInit { name, fields } => {
+            let field_strs: Vec<String> = fields
+                .iter()
+                .map(|(k, v)| {
+                    let val = generate_expr_owned(v);
+                    if val == *k {
+                        k.clone()
+                    } else {
+                        format!("{k}: {val}")
+                    }
+                })
+                .collect();
+            format!("{name} {{ {} }}", field_strs.join(", "))
         }
 
         Expr::Lambda(params, body) => {
@@ -232,6 +372,10 @@ fn map_builtin_call(func: &str, args: &[Expr]) -> Option<String> {
         "isinstance" => {
             // No direct Rust equivalent; leave as comment
             None
+        }
+        "Err" | "Ok" | "Some" => {
+            let arg_strs: Vec<String> = args.iter().map(generate_expr_owned).collect();
+            Some(format!("{}({})", func, arg_strs.join(", ")))
         }
         _ => None,
     }

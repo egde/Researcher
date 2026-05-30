@@ -1,0 +1,19 @@
+---
+source: tests/codegen_tests.rs
+expression: transpile(source)
+---
+use actix_web::{web, App, HttpServer, HttpResponse};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Item {
+    name: String,
+}
+
+impl Item {
+    fn new(name: String) -> Self {
+        Self {
+            name,
+        }
+    }
+}

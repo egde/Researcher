@@ -44,6 +44,7 @@ pub fn lower_base_model(class: &py::StmtClassDef) -> StructDef {
         fields,
         validators,
         methods,
+        is_base_model: true,
         span: SourceSpan { start: 0, end: 0 },
     }
 }

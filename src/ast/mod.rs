@@ -12,6 +12,19 @@ pub struct SourceSpan {
 pub struct Module {
     pub name: String,
     pub items: Vec<Item>,
+    pub import_aliases: Vec<ImportAlias>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportAlias {
+    pub name: String,
+    pub crate_path: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Decorator {
+    pub name: String,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Debug, Clone)]
@@ -28,6 +41,7 @@ pub struct Function {
     pub return_type: Option<TypeAnnotation>,
     pub body: Vec<Statement>,
     pub is_async: bool,
+    pub decorators: Vec<Decorator>,
     pub span: SourceSpan,
 }
 
@@ -78,6 +92,7 @@ pub struct StructDef {
     pub fields: Vec<FieldDef>,
     pub validators: Vec<ValidatorDef>,
     pub methods: Vec<MethodDef>,
+    pub is_base_model: bool,
     pub span: SourceSpan,
 }
 
@@ -146,6 +161,11 @@ pub enum Expr {
     List(Vec<Expr>),
     Dict(Vec<(Expr, Expr)>),
     Tuple(Vec<Expr>),
+
+    StructInit {
+        name: String,
+        fields: Vec<(String, Expr)>,
+    },
 
     Lambda(Vec<Param>, Box<Expr>),
     Await(Box<Expr>),
