@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Copperhead
 
-## Getting Started
+A Python subset that compiles to Rust. Write valid Python with Pydantic models, get idiomatic Rust binaries.
 
-First, run the development server:
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cargo build --release
+./target/release/copperhead init my-project
+cd my-project
+copperhead build
+copperhead run
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Usage
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+copperhead init <name>       # Create a new project
+copperhead build             # Transpile + cargo build
+copperhead run               # Build + run
+copperhead check             # Type + ownership check
+copperhead transpile <file>  # Output Rust to stdout
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Example
 
-## Learn More
+```python
+# src/main.cu.py
+from pydantic import BaseModel, Field
 
-To learn more about Next.js, take a look at the following resources:
+class User(BaseModel):
+    name: str
+    age: int = Field(ge=0, le=150)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+def greet(user: User) -> str:
+    return f"Hello, {user.name}!"
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+def main():
+    u = User(name="Alice", age=30)
+    print(greet(u))
+```
 
-## Deploy on Vercel
+Transpiles to:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```rust
+#[derive(Debug, Clone)]
+struct User {
+    name: String,
+    age: i64,
+}
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+impl User {
+    fn new(name: String, age: i64) -> Result<Self, ValidationError> {
+        if age < 0 {
+            return Err(ValidationError::field("age", "must be >= 0"));
+        }
+        if age > 150 {
+            return Err(ValidationError::field("age", "must be <= 150"));
+        }
+        Ok(Self { name, age })
+    }
+}
+
+fn greet(user: User) -> String {
+    format!("Hello, {}!", user.name)
+}
+
+fn main() {
+    let u = User::new("Alice".to_string(), 30);
+    println!("{}", greet(u));
+}
+```

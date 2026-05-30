@@ -1,0 +1,11 @@
+---
+source: tests/codegen_tests.rs
+assertion_line: 113
+expression: transpile(source)
+---
+fn countdown(n: i64) {
+    while n > 0 {
+        println!("{}", n);
+        let n = n - 1;
+    }
+}
